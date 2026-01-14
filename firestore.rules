@@ -15,8 +15,9 @@ service cloud.firestore {
 
         match /responses/{responseId} {
           allow read: if isInstructor();
-          // Students can create/update only their own response doc (docId == uid).
-          allow create, update: if request.auth != null && request.auth.uid == responseId;
+          // Students can create responses; each submission is a new document.
+          allow create: if request.auth != null;
+          allow update: if false;
           allow delete: if false;
         }
       }

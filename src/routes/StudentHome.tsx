@@ -53,7 +53,7 @@ export default function StudentHome() {
             </div>
 
             <button className="btn w-full" onClick={join} disabled={busy || room.trim().length < 4}>
-              <ArrowRight size={18} /> {busy ? 'Joining…' : 'Join'}
+              <ArrowRight size={18} /> {busy ? 'Joining...' : 'Join'}
             </button>
 
             <div className="text-xs text-slate-500">

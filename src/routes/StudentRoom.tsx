@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import TopBar from '../components/TopBar'
 import { auth, db, ensureAnonymousAuth } from '../firebase'
-import { collection, doc, getDocs, limit, onSnapshot, query, setDoc, where } from 'firebase/firestore'
+import { addDoc, collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
 import type { QuestionType } from '../components/QuestionEditor'
 import { CheckCircle2 } from 'lucide-react'
 
@@ -76,9 +76,9 @@ export default function StudentRoom() {
     if (!canSubmit || !uid || !session?.id || !question?.id) return
     setError(null)
     try {
-      const respRef = doc(db, 'sessions', session.id, 'questions', question.id, 'responses', uid)
       const value = question.type === 'number' ? Number(answer) : answer.trim()
-      await setDoc(respRef, { value, submittedAt: new Date() }, { merge: true })
+      const respRef = collection(db, 'sessions', session.id, 'questions', question.id, 'responses')
+      await addDoc(respRef, { value, submittedAt: serverTimestamp(), userId: uid })
       setStatus('sent')
       setTimeout(() => setStatus('idle'), 1500)
     } catch (e: any) {
@@ -118,7 +118,7 @@ export default function StudentRoom() {
             inputMode="decimal"
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Type a number…"
+            placeholder="Type a number..."
           />
         </div>
       )
@@ -131,7 +131,7 @@ export default function StudentRoom() {
             className="input text-lg"
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Type a short answer…"
+            placeholder="Type a short answer..."
           />
         </div>
       )
@@ -143,7 +143,7 @@ export default function StudentRoom() {
           className="input min-h-[140px]"
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
-          placeholder="Type your response (a few sentences)…"
+          placeholder="Type your response (a few sentences)..."
         />
       </div>
     )
@@ -172,12 +172,12 @@ export default function StudentRoom() {
           </div>
 
           {!session ? (
-            <div className="mt-6 text-slate-400">Joining…</div>
+            <div className="mt-6 text-slate-400">Joining...</div>
           ) : !session.isOpen ? (
             <div className="mt-6 text-slate-400">Room is closed.</div>
           ) : !question ? (
             <div className="mt-6">
-              <div className="text-lg font-semibold">Waiting for the next question…</div>
+              <div className="text-lg font-semibold">Waiting for the next question...</div>
               <div className="text-slate-400 mt-1">Keep this page open.</div>
             </div>
           ) : (
@@ -202,7 +202,7 @@ export default function StudentRoom() {
               </div>
 
               <div className="mt-2 text-xs text-slate-500">
-                You can resubmit; your latest answer overwrites your previous one.
+                You can submit multiple times; each response is recorded.
               </div>
             </>
           )}

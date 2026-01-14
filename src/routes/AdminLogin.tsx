@@ -70,7 +70,7 @@ export default function AdminLogin() {
             {error && <div className="text-sm text-red-300">{error}</div>}
 
             <button className="btn w-full" onClick={login} disabled={busy || password.length === 0}>
-              {busy ? 'Signing in…' : 'Sign in'}
+              {busy ? 'Signing in...' : 'Sign in'}
             </button>
 
             <div className="text-xs text-slate-400">

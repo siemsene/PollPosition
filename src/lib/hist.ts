@@ -39,7 +39,7 @@ export function numericHistogram(values: number[]) {
   const bins = counts.map((count, i) => {
     const a = min + i * width
     const b = i === k - 1 ? max : (min + (i + 1) * width)
-    const name = `${roundNice(a)}–${roundNice(b)}`
+    const name = `${roundNice(a)}-${roundNice(b)}`
     return { name, count }
   })
 
@@ -47,8 +47,5 @@ export function numericHistogram(values: number[]) {
 }
 
 function roundNice(x: number) {
-  // pretty labels, no unnecessary decimals
-  const r = Math.round(x * 100) / 100
-  if (Math.abs(r - Math.round(r)) < 1e-9) return `${Math.round(r)}`
-  return `${r}`
+  return `${Math.round(x)}`
 }

@@ -8,7 +8,7 @@ export type QuestionType = 'mcq' | 'number' | 'short' | 'long'
 export default function QuestionEditor({ sessionId }: { sessionId: string }) {
   const [type, setType] = useState<QuestionType>('mcq')
   const [prompt, setPrompt] = useState('')
-  const [options, setOptions] = useState<string[]>(['A', 'B', 'C', 'D'])
+  const [options, setOptions] = useState<string[]>(['', ''])
 
   const canCreate = prompt.trim().length > 0 && (type !== 'mcq' || options.filter(o => o.trim()).length >= 2)
 
@@ -27,7 +27,7 @@ export default function QuestionEditor({ sessionId }: { sessionId: string }) {
       createdAt: serverTimestamp(),
     })
     setPrompt('')
-    if (type === 'mcq') setOptions(['A', 'B', 'C', 'D'])
+    if (type === 'mcq') setOptions(['', ''])
   }
 
   return (

@@ -8,28 +8,46 @@
 
 * { -webkit-tap-highlight-color: transparent; }
 
+body {
+  @apply bg-slate-950 text-slate-100;
+  min-height: 100vh;
+  background-image:
+    radial-gradient(circle at 18% 20%, rgba(56, 189, 248, 0.18), transparent 40%),
+    radial-gradient(circle at 85% 0%, rgba(244, 114, 182, 0.12), transparent 45%),
+    linear-gradient(180deg, #0b1220 0%, #0a0f1a 100%);
+}
+
 .card {
-  @apply rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl;
+  @apply rounded-2xl bg-slate-900/90 border border-slate-600/70 shadow-xl;
 }
 
 .btn {
   @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-medium
-         bg-slate-100 text-slate-900 hover:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed;
+         bg-cyan-300 text-slate-900 hover:bg-cyan-200 transition disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .btn-ghost {
   @apply inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 font-medium
-         bg-transparent text-slate-200 hover:bg-slate-800/60 transition;
+         bg-transparent text-slate-100 hover:bg-slate-800/70 transition;
 }
 
 .input {
-  @apply w-full rounded-xl bg-slate-950/40 border border-slate-800 px-3 py-2
-         text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400/40;
+  @apply w-full rounded-xl bg-slate-950 border border-slate-500 px-3 py-2
+         text-slate-100 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-300/50;
 }
 
 .select {
-  @apply w-full rounded-xl bg-slate-950/40 border border-slate-800 px-3 py-2
-         text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-400/40;
+  @apply w-full rounded-xl bg-slate-950 border border-slate-500 px-3 py-2
+         text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-300/50;
 }
 
 .label { @apply text-sm text-slate-300; }
+
+@keyframes short-pop {
+  0% { opacity: 0; transform: scale(0.92) translateY(4px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.short-pop {
+  animation: short-pop 200ms ease-out;
+}

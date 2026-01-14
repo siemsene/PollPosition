@@ -10,11 +10,11 @@ export default function TopBar({ mode }: { mode: 'student' | 'instructor' }) {
     <div className="sticky top-0 z-10 bg-slate-950/70 backdrop-blur border-b border-slate-800">
       <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-2xl bg-white text-slate-950 flex items-center justify-center font-black">
-            M
+          <div className="h-9 w-9 rounded-xl bg-cyan-300 text-slate-950 flex items-center justify-center font-black tracking-tight">
+            PP
           </div>
           <div className="leading-tight">
-            <div className="font-semibold">Menti-Lite</div>
+            <div className="font-semibold">PollPosition</div>
             <div className="text-xs text-slate-400">{mode === 'instructor' ? 'Instructor' : 'Student'}</div>
           </div>
         </div>
