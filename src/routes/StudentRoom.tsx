@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import TopBar from '../components/TopBar'
 import { auth, db, ensureAnonymousAuth } from '../firebase'
-import { addDoc, collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
+import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore'
 import type { QuestionType } from '../components/QuestionEditor'
 import { CheckCircle2 } from 'lucide-react'
 
@@ -77,13 +77,18 @@ export default function StudentRoom() {
     setError(null)
     try {
       const value = question.type === 'number' ? Number(answer) : answer.trim()
-      const respRef = collection(db, 'sessions', session.id, 'questions', question.id, 'responses')
-      await addDoc(respRef, { value, submittedAt: serverTimestamp(), userId: uid })
+      const respRef = doc(db, 'sessions', session.id, 'questions', question.id, 'responses', uid)
+      await setDoc(respRef, { value, submittedAt: serverTimestamp(), userId: uid }, { merge: true })
       setStatus('sent')
       setTimeout(() => setStatus('idle'), 1500)
     } catch (e: any) {
       setStatus('error')
-      setError(e?.message ?? 'Failed to submit.')
+      const code = e?.code as string | undefined
+      if (code === 'permission-denied') {
+        setError('You have to wait for one minute before you can resubmit your answer.')
+      } else {
+        setError(e?.message ?? 'Failed to submit.')
+      }
     }
   }
 
@@ -202,7 +207,7 @@ export default function StudentRoom() {
               </div>
 
               <div className="mt-2 text-xs text-slate-500">
-                You can submit multiple times; each response is recorded.
+                You can resubmit after a short cooldown; your latest answer overwrites the previous one.
               </div>
             </>
           )}

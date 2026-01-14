@@ -15,9 +15,17 @@ service cloud.firestore {
 
         match /responses/{responseId} {
           allow read: if isInstructor();
-          // Students can create responses; each submission is a new document.
-          allow create: if request.auth != null;
-          allow update: if false;
+          // Students can create/update only their own response doc (docId == uid),
+          // with a 1-minute cooldown between submissions.
+          allow create: if request.auth != null
+            && request.auth.uid == responseId
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.submittedAt == request.time;
+          allow update: if request.auth != null
+            && request.auth.uid == responseId
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.submittedAt == request.time
+            && request.time > resource.data.submittedAt + duration.value(1, 'm');
           allow delete: if false;
         }
       }
