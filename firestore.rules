@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Public sessions/rooms: readable by anyone (so students can join)
+    match /sessions/{sessionId} {
+      allow read: if true;
+
+      // Only instructor can create/update/delete sessions
+      allow create, update, delete: if isInstructor();
+
+      match /questions/{questionId} {
+        allow read: if true;
+        allow create, update, delete: if isInstructor();
+
+        match /responses/{responseId} {
+          allow read: if isInstructor();
+          // Students can create/update only their own response doc (docId == uid).
+          allow create, update: if request.auth != null && request.auth.uid == responseId;
+          allow delete: if false;
+        }
+      }
+    }
+
+    // Helper: store the instructor UID in /config/admin (field: uid)
+    match /config/admin {
+      allow read: if isInstructor(); // keep it hidden from students
+      allow write: if isBootstrapAdminWrite();
+    }
+
+    function isInstructor() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/config/admin)
+        && get(/databases/$(database)/documents/config/admin).data.uid == request.auth.uid;
+    }
+
+    // Bootstrap: allow first authenticated user to write /config/admin if it does not exist yet.
+    // You will do this once from the /admin page after signing in as instructor.
+    function isBootstrapAdminWrite() {
+      return request.auth != null
+        && !exists(/databases/$(database)/documents/config/admin);
+    }
+  }
+}
