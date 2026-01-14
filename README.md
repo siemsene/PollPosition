@@ -1,6 +1,6 @@
-# Menti-Lite (Firebase + React)
+# Poll Position
 
-A lightweight Mentimeter-style classroom polling app.
+A lightweight classroom polling app.
 
 ## Features
 - Instructor login (fixed email + password, e.g. `Sesame`) using Firebase Auth (Email/Password)
