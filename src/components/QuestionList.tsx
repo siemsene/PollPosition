@@ -1,6 +1,7 @@
 import { collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import type { QuestionType } from './QuestionEditor'
+import type { SynthesisResult } from '../lib/synthesis'
 import { BarChart3, Download, Hash, MessageCircle, MessageSquareText, Play, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -9,6 +10,8 @@ export type Question = {
   type: QuestionType
   prompt: string
   options?: string[]
+  synthesis?: SynthesisResult | null
+  synthesizedCount?: number | null
 }
 
 export default function QuestionList({

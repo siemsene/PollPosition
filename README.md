@@ -31,6 +31,12 @@ A lightweight classroom polling app.
 3) Click "Bootstrap instructor access" to write your instructor UID into `/config/admin`
    - This enables security rules that only allow your UID to create/update sessions/questions.
 
+## OpenAI synthesis (server-side)
+1) Add `OPENAI_API_KEY` for Firebase Functions
+   - For local emulators, create `functions/.env` from `functions/.env.example`
+   - For deploy, set a Functions runtime env var for `OPENAI_API_KEY`
+2) Deploy functions if you are using hosting: `firebase deploy --only functions`
+
 ## Run locally
 ```bash
 npm install

@@ -5,9 +5,17 @@ import { collection, doc, getDocs, limit, onSnapshot, query, where } from 'fireb
 import { db } from '../firebase'
 import ResultsPanel from '../components/ResultsPanel'
 import type { QuestionType } from '../components/QuestionEditor'
+import type { SynthesisResult } from '../lib/synthesis'
 
 type Session = { id: string, roomCode: string, activeQuestionId: string | null, isOpen?: boolean }
-type Question = { id: string, type: QuestionType, prompt: string, options?: string[] }
+type Question = {
+  id: string,
+  type: QuestionType,
+  prompt: string,
+  options?: string[],
+  synthesis?: SynthesisResult | null,
+  synthesizedCount?: number | null,
+}
 type Resp = { id: string, value: unknown, submittedAt?: any }
 
 export default function PublicResults() {
@@ -55,7 +63,14 @@ export default function PublicResults() {
     const unsub = onSnapshot(doc(db, 'sessions', session.id, 'questions', session.activeQuestionId), (d) => {
       if (!d.exists()) { setQuestion(null); return }
       const data = d.data() as any
-      setQuestion({ id: d.id, type: data.type, prompt: data.prompt, options: data.options ?? [] })
+      setQuestion({
+        id: d.id,
+        type: data.type,
+        prompt: data.prompt,
+        options: data.options ?? [],
+        synthesis: data.synthesis ?? null,
+        synthesizedCount: data.synthesizedCount ?? null,
+      })
     })
     return () => unsub()
   }, [session?.id, session?.activeQuestionId])
@@ -108,6 +123,8 @@ export default function PublicResults() {
             responses={responses}
             question={question.prompt}
             variant="expanded"
+            synthesisFromStore={question.synthesis ?? null}
+            synthesizedCountFromStore={question.synthesizedCount ?? null}
           />
         )}
       </div>

@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInAnonymously } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getFunctions } from 'firebase/functions'
 
 /**
  * Put your Firebase web config into .env (see .env.example).
@@ -17,6 +18,7 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig)
 export const db = getFirestore(app)
 export const auth = getAuth(app)
+export const functions = getFunctions(app, 'us-central1')
 
 export async function ensureAnonymousAuth() {
   if (auth.currentUser) return auth.currentUser

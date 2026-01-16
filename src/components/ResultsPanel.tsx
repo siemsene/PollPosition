@@ -3,6 +3,9 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 
 import { Maximize2 } from 'lucide-react'
 import { excludeOutliers, numericHistogram, safeParseNumber } from '../lib/hist'
 import { wordFrequencies } from '../lib/text'
+import { synthesizeShortResponses, type SynthesisResult } from '../lib/synthesis'
+import { db } from '../firebase'
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import type { QuestionType } from './QuestionEditor'
 import WordCloudCanvas from './WordCloudCanvas'
 
@@ -15,6 +18,10 @@ export default function ResultsPanel({
   question,
   onExpand,
   variant = 'normal',
+  allowSynthesis = false,
+  synthesisFromStore = null,
+  synthesizedCountFromStore = null,
+  synthesisTarget,
 }: {
   type: QuestionType
   options: string[]
@@ -22,6 +29,10 @@ export default function ResultsPanel({
   question?: string
   onExpand?: () => void
   variant?: 'normal' | 'expanded'
+  allowSynthesis?: boolean
+  synthesisFromStore?: SynthesisResult | null
+  synthesizedCountFromStore?: number | null
+  synthesisTarget?: { sessionId: string, questionId: string }
 }) {
   const isExpanded = variant === 'expanded'
 
@@ -60,11 +71,70 @@ export default function ResultsPanel({
       .filter((r) => r.text.length > 0)
   }, [responses])
 
+  const longItems = useMemo(() => {
+    return responses
+      .map((r) => (typeof r.value === 'string' ? r.value : String(r.value ?? '')).trim())
+      .filter((v) => v.length > 0)
+  }, [responses])
+
   const words = useMemo(() => {
     return wordFrequencies(shortItems.map((item) => item.text), 90)
   }, [shortItems])
 
+  const [synthesis, setSynthesis] = useState<SynthesisResult | null>(null)
+  const [synthesisError, setSynthesisError] = useState<string | null>(null)
+  const [synthesizing, setSynthesizing] = useState(false)
+  const [synthesizedForCount, setSynthesizedForCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    setSynthesis(null)
+    setSynthesisError(null)
+    setSynthesizedForCount(null)
+  }, [question, type])
+
+  useEffect(() => {
+    if (!synthesisFromStore) return
+    setSynthesis(synthesisFromStore)
+    if (typeof synthesizedCountFromStore === 'number') {
+      setSynthesizedForCount(synthesizedCountFromStore)
+    }
+  }, [synthesisFromStore, synthesizedCountFromStore])
+
   const chartMarginTop = question ? 48 : 8
+  const canSynthesize = allowSynthesis && (type === 'short' || type === 'long')
+  const synthesisItemCount = type === 'long' ? longItems.length : shortItems.length
+  const isSynthesisStale = synthesis && synthesizedForCount !== null && synthesizedForCount !== synthesisItemCount
+
+  async function handleSynthesize() {
+    if (synthesizing || synthesisItemCount === 0) return
+    setSynthesisError(null)
+    setSynthesizing(true)
+    try {
+      const baseItems = type === 'long' ? longItems : shortItems.map((item) => item.text)
+      const result = await synthesizeShortResponses({
+        question,
+        items: baseItems,
+        mode: type === 'long' ? 'summary' : 'grouped',
+      })
+      setSynthesis(result)
+      setSynthesizedForCount(baseItems.length)
+      if (synthesisTarget) {
+        try {
+          await updateDoc(doc(db, 'sessions', synthesisTarget.sessionId, 'questions', synthesisTarget.questionId), {
+            synthesis: result,
+            synthesizedAt: serverTimestamp(),
+            synthesizedCount: baseItems.length,
+          })
+        } catch (err: any) {
+          setSynthesisError(err?.message ?? 'Synthesis saved locally, but failed to publish.')
+        }
+      }
+    } catch (err: any) {
+      setSynthesisError(err?.message ?? 'Failed to synthesize responses.')
+    } finally {
+      setSynthesizing(false)
+    }
+  }
 
   return (
     <div className="card p-4">
@@ -80,6 +150,16 @@ export default function ResultsPanel({
               <div>mean = {numData.mean === null ? 'n/a' : round2(numData.mean)}</div>
               <div>median = {numData.median === null ? 'n/a' : round2(numData.median)}</div>
             </div>
+          )}
+          {canSynthesize && (
+            <button
+              className="btn-ghost"
+              onClick={handleSynthesize}
+              disabled={synthesizing || synthesisItemCount === 0}
+              title="Synthesize responses"
+            >
+              {synthesizing ? 'Synthesizing...' : 'Synthesize'}
+            </button>
           )}
           {onExpand && (
             <button className="btn-ghost" onClick={onExpand} title="Expand results">
@@ -126,18 +206,87 @@ export default function ResultsPanel({
         )}
 
         {type === 'short' && (
-          <ShortTextCanvas
-            items={shortItems}
-            height={isExpanded ? 520 : 360}
-          />
+          <div className="space-y-4">
+            <ShortTextCanvas
+              items={shortItems}
+              height={isExpanded ? 520 : 360}
+            />
+            {(canSynthesize || synthesis) && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold text-slate-700">Synthesis</div>
+                  {isSynthesisStale && (
+                    <div className="text-xs text-amber-700">New responses since last synthesis.</div>
+                  )}
+                </div>
+                {synthesisError && (
+                  <div className="mt-2 text-sm text-red-600">{synthesisError}</div>
+                )}
+                {!synthesis && canSynthesize && !synthesizing && !synthesisError && (
+                  <div className="mt-2 text-sm text-slate-600">
+                    Click "Synthesize" to group and summarize the responses.
+                  </div>
+                )}
+                {synthesizing && (
+                  <div className="mt-2 text-sm text-slate-500">Generating synthesis...</div>
+                )}
+                {synthesis && (
+                  <div className="mt-3 space-y-4">
+                    {synthesis.overallSummary && (
+                      <div className="text-sm text-slate-700">{synthesis.overallSummary}</div>
+                    )}
+                    {synthesis.groups.map((group, idx) => (
+                      <div key={`${group.theme}-${idx}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-sm font-semibold text-slate-700">{group.theme}</div>
+                        <div className="mt-1 text-sm text-slate-600">{group.summary}</div>
+                        {group.contributions.length > 0 && (
+                          <div className="mt-2 text-xs text-slate-500">
+                            {group.contributions.join(' | ')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {type === 'long' && (
-          <div className={isExpanded ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2' : 'h-[360px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2'}>
-            {words.length === 0 ? (
-              <div className="text-slate-600 text-sm p-3">No answers yet.</div>
-            ) : (
-              <WordCloudCanvas words={words} />
+          <div className="space-y-4">
+            <div className={isExpanded ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2' : 'h-[360px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2'}>
+              {words.length === 0 ? (
+                <div className="text-slate-600 text-sm p-3">No answers yet.</div>
+              ) : (
+                <WordCloudCanvas words={words} />
+              )}
+            </div>
+            {(canSynthesize || synthesis) && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold text-slate-700">Synthesis</div>
+                  {isSynthesisStale && (
+                    <div className="text-xs text-amber-700">New responses since last synthesis.</div>
+                  )}
+                </div>
+                {synthesisError && (
+                  <div className="mt-2 text-sm text-red-600">{synthesisError}</div>
+                )}
+                {!synthesis && canSynthesize && !synthesizing && !synthesisError && (
+                  <div className="mt-2 text-sm text-slate-600">
+                    Click "Synthesize" to summarize the responses.
+                  </div>
+                )}
+                {synthesizing && (
+                  <div className="mt-2 text-sm text-slate-500">Generating synthesis...</div>
+                )}
+                {synthesis && (
+                  <div className="mt-3 text-sm text-slate-700">
+                    {synthesis.overallSummary ?? synthesis.groups.map((group) => group.summary).join(' ')}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

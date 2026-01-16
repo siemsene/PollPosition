@@ -349,6 +349,10 @@ export default function InstructorDashboard() {
                   responses={responses}
                   question={activeQuestion.prompt}
                   onExpand={() => setShowExpandedResults(true)}
+                  allowSynthesis
+                  synthesisFromStore={activeQuestion.synthesis ?? null}
+                  synthesizedCountFromStore={activeQuestion.synthesizedCount ?? null}
+                  synthesisTarget={sessionId ? { sessionId, questionId: activeQuestion.id } : undefined}
                 />
               )}
             </div>
@@ -370,6 +374,10 @@ export default function InstructorDashboard() {
               responses={responses}
               question={activeQuestion.prompt}
               variant="expanded"
+              allowSynthesis
+              synthesisFromStore={activeQuestion.synthesis ?? null}
+              synthesizedCountFromStore={activeQuestion.synthesizedCount ?? null}
+              synthesisTarget={sessionId ? { sessionId, questionId: activeQuestion.id } : undefined}
             />
           </div>
         </div>
