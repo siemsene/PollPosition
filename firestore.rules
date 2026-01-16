@@ -14,7 +14,7 @@ service cloud.firestore {
         allow create, update, delete: if isInstructor();
 
         match /responses/{responseId} {
-          allow read: if isInstructor();
+          allow read: if isInstructor() || isActiveQuestionPublic(sessionId, questionId);
           // Students can create/update only their own response doc (docId == uid),
           // with a 1-minute cooldown between submissions.
           allow create: if request.auth != null
@@ -48,6 +48,11 @@ service cloud.firestore {
     function isBootstrapAdminWrite() {
       return request.auth != null
         && !exists(/databases/$(database)/documents/config/admin);
+    }
+
+    function isActiveQuestionPublic(sessionId, questionId) {
+      return exists(/databases/$(database)/documents/sessions/$(sessionId))
+        && get(/databases/$(database)/documents/sessions/$(sessionId)).data.activeQuestionId == questionId;
     }
   }
 }

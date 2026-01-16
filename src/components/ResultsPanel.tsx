@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import { Maximize2 } from 'lucide-react'
-import { numericHistogram, safeParseNumber } from '../lib/hist'
+import { excludeOutliers, numericHistogram, safeParseNumber } from '../lib/hist'
 import { wordFrequencies } from '../lib/text'
 import type { QuestionType } from './QuestionEditor'
 import WordCloudCanvas from './WordCloudCanvas'
@@ -40,12 +40,15 @@ export default function ResultsPanel({
       .map(r => safeParseNumber(r.value))
       .filter((v): v is number => v !== null)
 
-    const hist = numericHistogram(vals)
-    const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
-    const sorted = vals.slice().sort((a, b) => a - b)
-    const median = vals.length ? sorted[Math.floor((sorted.length - 1) / 2)] : null
+    const filtered = excludeOutliers(vals)
+    const stats = filtered.length > 0 ? filtered : vals
 
-    return { hist, mean, median, n: vals.length }
+    const hist = numericHistogram(vals)
+    const mean = stats.length ? stats.reduce((a, b) => a + b, 0) / stats.length : null
+    const sorted = stats.slice().sort((a, b) => a - b)
+    const median = stats.length ? sorted[Math.floor((sorted.length - 1) / 2)] : null
+
+    return { hist, mean, median, n: stats.length }
   }, [responses])
 
   const shortItems = useMemo(() => {
@@ -60,6 +63,8 @@ export default function ResultsPanel({
   const words = useMemo(() => {
     return wordFrequencies(shortItems.map((item) => item.text), 90)
   }, [shortItems])
+
+  const chartMarginTop = question ? 48 : 8
 
   return (
     <div className="card p-4">
@@ -99,7 +104,7 @@ export default function ResultsPanel({
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={type === 'mcq' ? mcqData : numData.hist.bins}
-                margin={{ left: 8, right: 8, top: 8, bottom: 8 }}
+                margin={{ left: 8, right: 8, top: chartMarginTop, bottom: 8 }}
                   barCategoryGap={6}
                   barGap={2}
                 >

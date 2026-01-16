@@ -3,6 +3,7 @@ import StudentHome from './routes/StudentHome'
 import StudentRoom from './routes/StudentRoom'
 import AdminLogin from './routes/AdminLogin'
 import InstructorDashboard from './routes/InstructorDashboard'
+import PublicResults from './routes/PublicResults'
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
       <Route path="/room" element={<StudentRoom />} />
       <Route path="/admin" element={<AdminLogin />} />
       <Route path="/admin/dashboard" element={<InstructorDashboard />} />
+      <Route path="/results" element={<PublicResults />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

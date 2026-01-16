@@ -8,13 +8,14 @@ import QRCodeCard from '../components/QRCodeCard'
 import QuestionEditor from '../components/QuestionEditor'
 import QuestionList, { type Question } from '../components/QuestionList'
 import ResultsPanel from '../components/ResultsPanel'
+import PublicResultsCard from '../components/PublicResultsCard'
 import { Wand2, X } from 'lucide-react'
 
 type Resp = { id: string, value: unknown, submittedAt?: any }
 
 export default function InstructorDashboard() {
   const nav = useNavigate()
-  const user = auth.currentUser
+  const [user, setUser] = useState(() => auth.currentUser)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [session, setSession] = useState<any>(null)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -32,6 +33,7 @@ export default function InstructorDashboard() {
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
+      setUser(u)
       if (!u) nav('/admin', { replace: true })
     })
     return () => unsub()
@@ -41,6 +43,10 @@ export default function InstructorDashboard() {
   useEffect(() => {
     let alive = true
     ;(async () => {
+      if (!user) {
+        setBootstrapOk(null)
+        return
+      }
       try {
         const snap = await getDoc(doc(db, 'config', 'admin'))
         if (!alive) return
@@ -160,6 +166,17 @@ export default function InstructorDashboard() {
     })
     return () => unsub()
   }, [sessionId, session?.activeQuestionId])
+
+  useEffect(() => {
+    if (!showExpandedResults) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setShowExpandedResults(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [showExpandedResults])
 
   const room = useMemo(() => session?.roomCode as string | undefined, [session])
   async function selectSession(id: string) {
@@ -283,7 +300,12 @@ export default function InstructorDashboard() {
             </div>
           </div>
           <div className="lg:col-span-2 space-y-6">
-            {room && <QRCodeCard roomCode={room} />}
+            {room && (
+              <>
+                <QRCodeCard roomCode={room} />
+                <PublicResultsCard roomCode={room} />
+              </>
+            )}
 
             <div className="grid lg:grid-cols-2 gap-6">
               {sessionId && <QuestionEditor sessionId={sessionId} />}
