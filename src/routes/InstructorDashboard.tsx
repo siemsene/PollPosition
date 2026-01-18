@@ -15,13 +15,14 @@ type Resp = { id: string, value: unknown, submittedAt?: any }
 
 export default function InstructorDashboard() {
   const nav = useNavigate()
+  const instructorEmail = useMemo(() => (import.meta.env.VITE_INSTRUCTOR_EMAIL as string) || '', [])
   const [user, setUser] = useState(() => auth.currentUser)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [session, setSession] = useState<any>(null)
   const [questions, setQuestions] = useState<Question[]>([])
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null)
   const [responses, setResponses] = useState<Resp[]>([])
-  const [bootstrapOk, setBootstrapOk] = useState<boolean | null>(null)
+  const [bootstrapState, setBootstrapState] = useState<'unknown' | 'missing' | 'mismatch' | 'reclaimable' | 'ok'>('unknown')
   const [actionError, setActionError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [bootstrapping, setBootstrapping] = useState(false)
@@ -44,20 +45,37 @@ export default function InstructorDashboard() {
     let alive = true
     ;(async () => {
       if (!user) {
-        setBootstrapOk(null)
+        setBootstrapState('unknown')
         return
       }
       try {
         const snap = await getDoc(doc(db, 'config', 'admin'))
         if (!alive) return
-        setBootstrapOk(snap.exists())
-      } catch (_err) {
+        if (!snap.exists()) {
+          setBootstrapState('missing')
+          return
+        }
+        const data = snap.data() as any
+        if (data?.uid === user.uid) {
+          setBootstrapState('ok')
+          return
+        }
+        if (user.email && data?.email && data.email === user.email) {
+          setBootstrapState('reclaimable')
+          return
+        }
+        if (user.email && instructorEmail && user.email === instructorEmail) {
+          setBootstrapState('reclaimable')
+          return
+        }
+        setBootstrapState('mismatch')
+      } catch (_err: any) {
         if (!alive) return
-        setBootstrapOk(false)
+        setBootstrapState('mismatch')
       }
     })()
     return () => { alive = false }
-  }, [user?.uid])
+  }, [user?.uid, instructorEmail])
 
   async function bootstrapInstructor() {
     if (!auth.currentUser || bootstrapping) return
@@ -66,11 +84,30 @@ export default function InstructorDashboard() {
     try {
       await setDoc(doc(db, 'config', 'admin'), {
         uid: auth.currentUser.uid,
+        email: auth.currentUser.email ?? null,
         createdAt: serverTimestamp(),
       })
-      setBootstrapOk(true)
+      setBootstrapState('ok')
     } catch (e: any) {
       setActionError(e?.message ?? 'Failed to bootstrap instructor access.')
+    } finally {
+      setBootstrapping(false)
+    }
+  }
+
+  async function reclaimInstructor() {
+    if (!auth.currentUser || bootstrapping) return
+    setActionError(null)
+    setBootstrapping(true)
+    try {
+      await setDoc(doc(db, 'config', 'admin'), {
+        uid: auth.currentUser.uid,
+        email: auth.currentUser.email ?? null,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+      setBootstrapState('ok')
+    } catch (e: any) {
+      setActionError(e?.message ?? 'Failed to reclaim instructor access.')
     } finally {
       setBootstrapping(false)
     }
@@ -102,13 +139,13 @@ export default function InstructorDashboard() {
 
   // Auto-pick latest session (optional). We'll keep it simple: if none selected, create one.
   useEffect(() => {
-    if (bootstrapOk !== true || sessionId || !sessionsLoaded) return
+    if (bootstrapState !== 'ok' || sessionId || !sessionsLoaded) return
     if (sessions.length > 0) {
       setSessionId(sessions[0].id)
       return
     }
     createSession().catch(() => {})
-  }, [sessionId, bootstrapOk, sessionsLoaded, sessions])
+  }, [sessionId, bootstrapState, sessionsLoaded, sessions])
 
   // Subscribe session
   useEffect(() => {
@@ -207,6 +244,21 @@ export default function InstructorDashboard() {
   }
 
   if (!user) return null
+  if (bootstrapState === 'mismatch') {
+    return (
+      <div>
+        <TopBar mode="instructor" />
+        <div className="mx-auto max-w-3xl px-4 py-8">
+          <div className="card p-4 border border-red-500/30 bg-red-500/10">
+            <div className="font-semibold text-red-200">Instructor access required</div>
+            <div className="text-sm text-red-100/80 mt-1">
+              This account is not the configured instructor for this project. Sign out and log in with the instructor email.
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -225,7 +277,7 @@ export default function InstructorDashboard() {
               onChange={(e) => setNewSessionTitle(e.target.value)}
               placeholder="Session name"
             />
-            <button className="btn" onClick={createSession} disabled={creating || bootstrapOk !== true}>
+            <button className="btn" onClick={createSession} disabled={creating || bootstrapState !== 'ok'}>
               {creating ? 'Creating...' : 'New session'}
             </button>
           </div>
@@ -238,7 +290,7 @@ export default function InstructorDashboard() {
           </div>
         )}
 
-        {bootstrapOk === false && (
+        {bootstrapState === 'missing' && (
           <div className="card p-4 border border-amber-500/30 bg-amber-500/10">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -253,6 +305,31 @@ export default function InstructorDashboard() {
               <button className="btn" onClick={bootstrapInstructor} disabled={bootstrapping}>
                 {bootstrapping ? 'Bootstrapping...' : 'Bootstrap now'}
               </button>
+            </div>
+          </div>
+        )}
+
+        {bootstrapState === 'reclaimable' && (
+          <div className="card p-4 border border-amber-500/30 bg-amber-500/10">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold text-amber-200">Reclaim instructor access</div>
+                <div className="text-sm text-amber-100/80 mt-1">
+                  This account matches the instructor email, but the stored UID is different. Reclaim access to continue.
+                </div>
+              </div>
+              <button className="btn" onClick={reclaimInstructor} disabled={bootstrapping}>
+                {bootstrapping ? 'Updating...' : 'Reclaim access'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {bootstrapState === 'mismatch' && (
+          <div className="card p-4 border border-red-500/30 bg-red-500/10">
+            <div className="font-semibold text-red-200">Instructor access required</div>
+            <div className="text-sm text-red-100/80 mt-1">
+              This account is not the configured instructor for this project. Sign out and log in with the instructor email.
             </div>
           </div>
         )}
@@ -388,6 +465,7 @@ export default function InstructorDashboard() {
 
 function label(t: string) {
   if (t === 'mcq') return 'Multiple choice'
+  if (t === 'pie') return 'Pie (100-point allocation)'
   if (t === 'number') return 'Numerical'
   if (t === 'short') return 'Short text'
   return 'Extended text'

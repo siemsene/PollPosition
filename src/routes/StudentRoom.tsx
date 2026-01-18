@@ -16,6 +16,7 @@ export default function StudentRoom() {
   const [session, setSession] = useState<Session | null>(null)
   const [question, setQuestion] = useState<Question | null>(null)
   const [answer, setAnswer] = useState<string>('')
+  const [allocations, setAllocations] = useState<Record<string, string>>({})
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
 
@@ -67,16 +68,50 @@ export default function StudentRoom() {
   useEffect(() => {
     setAnswer('')
     setStatus('idle')
+    if (question?.type === 'pie') {
+      const next: Record<string, string> = {}
+      for (const opt of question.options ?? []) next[opt] = ''
+      setAllocations(next)
+    } else {
+      setAllocations({})
+    }
   }, [question?.id])
 
   const uid = auth.currentUser?.uid
-  const canSubmit = !!uid && !!session?.id && !!question?.id && answer.trim().length > 0
+  const allocationTotal = useMemo(() => {
+    if (!question || question.type !== 'pie') return 0
+    return (question.options ?? []).reduce((sum, opt) => {
+      const raw = allocations[opt]
+      const num = raw === '' ? 0 : Number(raw)
+      return sum + (Number.isFinite(num) && num > 0 ? num : 0)
+    }, 0)
+  }, [question, allocations])
+
+  const canSubmit = !!uid && !!session?.id && !!question?.id && (
+    question?.type === 'pie' ? true : answer.trim().length > 0
+  )
 
   async function submit() {
     if (!canSubmit || !uid || !session?.id || !question?.id) return
     setError(null)
     try {
-      const value = question.type === 'number' ? Number(answer) : answer.trim()
+      if (question.type === 'pie') {
+        const roundedTotal = Math.round(allocationTotal * 100) / 100
+        if (Math.abs(roundedTotal - 100) > 0.001) {
+          window.alert('Please make sure your points add up to 100 before submitting.')
+          return
+        }
+      }
+      const value = question.type === 'pie'
+        ? (question.options ?? []).reduce((acc, opt) => {
+            const raw = allocations[opt]
+            const num = raw === '' ? 0 : Number(raw)
+            acc[opt] = Number.isFinite(num) && num > 0 ? num : 0
+            return acc
+          }, {} as Record<string, number>)
+        : question.type === 'number'
+          ? Number(answer)
+          : answer.trim()
       const respRef = doc(db, 'sessions', session.id, 'questions', question.id, 'responses', uid)
       await setDoc(respRef, { value, submittedAt: serverTimestamp(), userId: uid }, { merge: true })
       setStatus('sent')
@@ -142,6 +177,36 @@ export default function StudentRoom() {
       )
     }
 
+    if (question.type === 'pie') {
+      return (
+        <div className="mt-4 space-y-3">
+          {(question.options ?? []).map((opt) => (
+            <div key={opt} className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium text-slate-200">{opt}</div>
+              <input
+                className="input w-24 text-right"
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                value={allocations[opt] ?? ''}
+                onChange={(e) => {
+                  const next = { ...allocations, [opt]: e.target.value }
+                  setAllocations(next)
+                }}
+              />
+            </div>
+          ))}
+          <div className="flex items-center justify-between text-sm text-slate-400">
+            <div>Total allocated</div>
+            <div className={allocationTotal === 100 ? 'text-emerald-300' : 'text-amber-300'}>
+              {allocationTotal} / 100
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="mt-4">
         <textarea
@@ -152,7 +217,7 @@ export default function StudentRoom() {
         />
       </div>
     )
-  }, [question, answer])
+  }, [question, answer, allocations, allocationTotal])
 
   return (
     <div>
@@ -219,6 +284,7 @@ export default function StudentRoom() {
 
 function label(t: string) {
   if (t === 'mcq') return 'Multiple choice'
+  if (t === 'pie') return 'Pie (100-point allocation)'
   if (t === 'number') return 'Numerical'
   if (t === 'short') return 'Short text'
   return 'Extended text'

@@ -33,8 +33,9 @@ service cloud.firestore {
 
     // Helper: store the instructor UID in /config/admin (field: uid)
     match /config/admin {
-      allow read: if isInstructor(); // keep it hidden from students
-      allow write: if isBootstrapAdminWrite();
+      allow read: if request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+      allow write: if isBootstrapAdminWrite() || isReclaimAdminWrite() || isConfiguredInstructorEmail();
     }
 
     function isInstructor() {
@@ -48,6 +49,20 @@ service cloud.firestore {
     function isBootstrapAdminWrite() {
       return request.auth != null
         && !exists(/databases/$(database)/documents/config/admin);
+    }
+
+    function isReclaimAdminWrite() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && exists(/databases/$(database)/documents/config/admin)
+        && request.auth.token.email != null
+        && get(/databases/$(database)/documents/config/admin).data.email == request.auth.token.email;
+    }
+
+    function isConfiguredInstructorEmail() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.auth.token.email == "siemsene@gmail.com";
     }
 
     function isActiveQuestionPublic(sessionId, questionId) {

@@ -3,14 +3,15 @@ import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { Plus } from 'lucide-react'
 
-export type QuestionType = 'mcq' | 'number' | 'short' | 'long'
+export type QuestionType = 'mcq' | 'number' | 'short' | 'long' | 'pie'
 
 export default function QuestionEditor({ sessionId }: { sessionId: string }) {
   const [type, setType] = useState<QuestionType>('mcq')
   const [prompt, setPrompt] = useState('')
   const [options, setOptions] = useState<string[]>(['', ''])
 
-  const canCreate = prompt.trim().length > 0 && (type !== 'mcq' || options.filter(o => o.trim()).length >= 2)
+  const usesOptions = type === 'mcq' || type === 'pie'
+  const canCreate = prompt.trim().length > 0 && (!usesOptions || options.filter(o => o.trim()).length >= 2)
 
   const optionsClean = useMemo(
     () => options.map(o => o.trim()).filter(Boolean),
@@ -23,11 +24,11 @@ export default function QuestionEditor({ sessionId }: { sessionId: string }) {
     await addDoc(ref, {
       type,
       prompt: prompt.trim(),
-      options: type === 'mcq' ? optionsClean : [],
+      options: usesOptions ? optionsClean : [],
       createdAt: serverTimestamp(),
     })
     setPrompt('')
-    if (type === 'mcq') setOptions(['', ''])
+    if (usesOptions) setOptions(['', ''])
   }
 
   return (
@@ -44,6 +45,7 @@ export default function QuestionEditor({ sessionId }: { sessionId: string }) {
           <div className="label mb-1">Answer type</div>
           <select className="select" value={type} onChange={(e) => setType(e.target.value as QuestionType)}>
             <option value="mcq">Multiple choice</option>
+            <option value="pie">Pie chart (100-point allocation)</option>
             <option value="number">Numerical</option>
             <option value="short">Short text</option>
             <option value="long">Extended text (word cloud)</option>
@@ -60,9 +62,9 @@ export default function QuestionEditor({ sessionId }: { sessionId: string }) {
           />
         </div>
 
-        {type === 'mcq' && (
+        {usesOptions && (
           <div>
-            <div className="label mb-1">Options</div>
+            <div className="label mb-1">{type === 'pie' ? 'Categories' : 'Options'}</div>
             <div className="grid md:grid-cols-2 gap-2">
               {options.map((opt, idx) => (
                 <input
@@ -74,14 +76,15 @@ export default function QuestionEditor({ sessionId }: { sessionId: string }) {
                     next[idx] = e.target.value
                     setOptions(next)
                   }}
+                  placeholder={type === 'pie' ? `Category ${idx + 1}` : undefined}
                 />
               ))}
             </div>
             <button
               className="btn-ghost mt-2"
-              onClick={() => setOptions([...options, `Option ${options.length + 1}`])}
+              onClick={() => setOptions([...options, type === 'pie' ? `Category ${options.length + 1}` : `Option ${options.length + 1}`])}
             >
-              <Plus size={16} /> Add option
+              <Plus size={16} /> {type === 'pie' ? 'Add category' : 'Add option'}
             </button>
           </div>
         )}

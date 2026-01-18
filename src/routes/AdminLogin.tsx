@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '../firebase'
@@ -7,11 +7,10 @@ import { Shield } from 'lucide-react'
 
 export default function AdminLogin() {
   const nav = useNavigate()
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  const email = useMemo(() => (import.meta.env.VITE_INSTRUCTOR_EMAIL as string) || 'instructor@example.com', [])
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
@@ -51,9 +50,13 @@ export default function AdminLogin() {
           <div className="mt-6 space-y-3">
             <div>
               <div className="label mb-1">Instructor email</div>
-              <div className="text-sm text-slate-200 bg-slate-950/30 border border-slate-800 rounded-xl px-3 py-2">
-                {email}
-              </div>
+              <input
+                className="input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
             </div>
 
             <div>
@@ -63,13 +66,12 @@ export default function AdminLogin() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Sesame"
               />
             </div>
 
             {error && <div className="text-sm text-red-300">{error}</div>}
 
-            <button className="btn w-full" onClick={login} disabled={busy || password.length === 0}>
+            <button className="btn w-full" onClick={login} disabled={busy || password.length === 0 || email.trim().length === 0}>
               {busy ? 'Signing in...' : 'Sign in'}
             </button>
 

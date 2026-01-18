@@ -2,7 +2,7 @@ import { collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 
 import { db } from '../firebase'
 import type { QuestionType } from './QuestionEditor'
 import type { SynthesisResult } from '../lib/synthesis'
-import { BarChart3, Download, Hash, MessageCircle, MessageSquareText, Play, Trash2 } from 'lucide-react'
+import { BarChart3, Download, Hash, MessageCircle, MessageSquareText, PieChart, Play, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 export type Question = {
@@ -113,7 +113,7 @@ export default function QuestionList({
                       <TypeIcon type={q.type} />
                       <span className="text-sm font-medium truncate">{q.prompt}</span>
                     </div>
-                    {q.type === 'mcq' && (
+                    {(q.type === 'mcq' || q.type === 'pie') && (
                       <div className="mt-1 text-xs text-slate-400 truncate">
                         {(q.options ?? []).join(' / ')}
                       </div>
@@ -153,6 +153,7 @@ export default function QuestionList({
 function TypeIcon({ type }: { type: QuestionType }) {
   const cls = "text-slate-300"
   if (type === 'mcq') return <BarChart3 size={16} className={cls} />
+  if (type === 'pie') return <PieChart size={16} className={cls} />
   if (type === 'number') return <Hash size={16} className={cls} />
   if (type === 'short') return <MessageCircle size={16} className={cls} />
   return <MessageSquareText size={16} className={cls} />

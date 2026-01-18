@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Maximize2 } from 'lucide-react'
 import { excludeOutliers, numericHistogram, safeParseNumber } from '../lib/hist'
 import { wordFrequencies } from '../lib/text'
@@ -70,6 +70,22 @@ export default function ResultsPanel({
       }))
       .filter((r) => r.text.length > 0)
   }, [responses])
+
+  const pieData = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const opt of options) totals.set(opt, 0)
+    for (const r of responses) {
+      if (!r.value || typeof r.value !== 'object') continue
+      const obj = r.value as Record<string, unknown>
+      for (const opt of options) {
+        const raw = obj[opt]
+        const num = typeof raw === 'number' ? raw : Number(raw)
+        if (!Number.isFinite(num)) continue
+        totals.set(opt, (totals.get(opt) ?? 0) + num)
+      }
+    }
+    return Array.from(totals.entries()).map(([name, value]) => ({ name, value }))
+  }, [responses, options])
 
   const longItems = useMemo(() => {
     return responses
@@ -205,6 +221,44 @@ export default function ResultsPanel({
           </div>
         )}
 
+        {type === 'pie' && (
+          <div className={isExpanded ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative' : 'h-[320px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative'}>
+            {question && (
+              <>
+                <div className="absolute left-3 right-3 top-2 text-lg font-semibold text-slate-700 pointer-events-none text-center">
+                  {question}
+                </div>
+                <div className="absolute left-3 right-3 top-8 text-xs text-slate-500 pointer-events-none text-center">
+                  {responses.length} response(s)
+                </div>
+              </>
+            )}
+            {pieData.every((d) => d.value === 0) ? (
+              <div className="h-full flex items-center justify-center text-sm text-slate-500">
+                No allocations yet.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={isExpanded ? 90 : 70}
+                    outerRadius={isExpanded ? 170 : 120}
+                    paddingAngle={2}
+                  >
+                    {pieData.map((entry, idx) => (
+                      <Cell key={`${entry.name}-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} stroke="#ffffff" strokeWidth={1} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: any) => [value, 'Points']} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        )}
+
         {type === 'short' && (
           <div className="space-y-4">
             <ShortTextCanvas
@@ -299,6 +353,8 @@ function round2(x: number) {
   const r = Math.round(x * 100) / 100
   return (Math.abs(r - Math.round(r)) < 1e-9) ? `${Math.round(r)}` : `${r}`
 }
+
+const PIE_COLORS = ['#1d4ed8', '#0f766e', '#c2410c', '#7c3aed', '#0f172a', '#14b8a6', '#f97316', '#6366f1']
 
 type ShortItem = { id: string, text: string }
 type Box = { id: string, text: string, x: number, y: number, width: number, height: number }
