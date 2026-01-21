@@ -284,7 +284,7 @@ export default function StudentRoom() {
 
 function label(t: string) {
   if (t === 'mcq') return 'Multiple choice'
-  if (t === 'pie') return 'Pie (100-point allocation)'
+  if (t === 'pie') return '100 point allocation'
   if (t === 'number') return 'Numerical'
   if (t === 'short') return 'Short text'
   return 'Extended text'

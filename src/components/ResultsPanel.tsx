@@ -131,6 +131,7 @@ export default function ResultsPanel({
         question,
         items: baseItems,
         mode: type === 'long' ? 'summary' : 'grouped',
+        sessionId: synthesisTarget?.sessionId,
       })
       setSynthesis(result)
       setSynthesizedForCount(baseItems.length)

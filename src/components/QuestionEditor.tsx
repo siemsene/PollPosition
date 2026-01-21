@@ -45,10 +45,10 @@ export default function QuestionEditor({ sessionId }: { sessionId: string }) {
           <div className="label mb-1">Answer type</div>
           <select className="select" value={type} onChange={(e) => setType(e.target.value as QuestionType)}>
             <option value="mcq">Multiple choice</option>
-            <option value="pie">Pie chart (100-point allocation)</option>
+            <option value="pie">100 point allocation</option>
             <option value="number">Numerical</option>
             <option value="short">Short text</option>
-            <option value="long">Extended text (word cloud)</option>
+            <option value="long">Extended text</option>
           </select>
         </div>
 

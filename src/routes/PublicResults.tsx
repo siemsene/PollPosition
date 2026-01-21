@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import TopBar from '../components/TopBar'
 import { collection, doc, getDocs, limit, onSnapshot, query, where } from 'firebase/firestore'
-import { db } from '../firebase'
+import { db, ensureAnonymousAuth } from '../firebase'
 import ResultsPanel from '../components/ResultsPanel'
 import type { QuestionType } from '../components/QuestionEditor'
 import type { SynthesisResult } from '../lib/synthesis'
@@ -32,8 +32,13 @@ export default function PublicResults() {
   }, [roomCode, nav])
 
   useEffect(() => {
+    ensureAnonymousAuth().catch(() => {})
+  }, [])
+
+  useEffect(() => {
     let unsub: any = null
     ;(async () => {
+      await ensureAnonymousAuth()
       const qRef = query(collection(db, 'sessions'), where('roomCode', '==', roomCode), limit(1))
       const snap = await getDocs(qRef)
       if (snap.empty) {

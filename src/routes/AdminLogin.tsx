@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { signInWithEmailAndPassword } from 'firebase/auth'
-import { auth } from '../firebase'
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
+import { auth, db } from '../firebase'
 import TopBar from '../components/TopBar'
 import { Shield } from 'lucide-react'
 
@@ -10,25 +11,59 @@ export default function AdminLogin() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [resetInfo, setResetInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
-      if (u) nav('/admin/dashboard', { replace: true })
+      if (u && !u.isAnonymous) {
+        getDoc(doc(db, 'config', 'admin'))
+          .then((snap) => {
+            const isAdmin = snap.exists() && snap.data()?.uid === u.uid
+            nav(isAdmin ? '/admin/overview' : '/admin/dashboard', { replace: true })
+          })
+          .catch(() => {
+            nav('/admin/dashboard', { replace: true })
+          })
+      } else if (u?.isAnonymous) {
+        auth.signOut().catch(() => {})
+      }
     })
     return () => unsub()
   }, [nav])
 
   async function login() {
     setError(null)
+    setResetInfo(null)
     setBusy(true)
     try {
+      if (auth.currentUser?.isAnonymous) {
+        await auth.signOut()
+      }
       await signInWithEmailAndPassword(auth, email, password)
-      nav('/admin/dashboard', { replace: true })
+      const snap = await getDoc(doc(db, 'config', 'admin'))
+      const isAdmin = snap.exists() && snap.data()?.uid === auth.currentUser?.uid
+      nav(isAdmin ? '/admin/overview' : '/admin/dashboard', { replace: true })
     } catch (e: any) {
       setError(e?.message ?? 'Login failed')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function resetPassword() {
+    const trimmed = email.trim()
+    if (!trimmed) {
+      setError('Enter your email above to receive a reset link.')
+      return
+    }
+    setError(null)
+    setResetInfo(null)
+    try {
+      await sendPasswordResetEmail(auth, trimmed)
+      setResetInfo('Password reset email sent. Check your inbox.')
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to send reset email.')
     }
   }
 
@@ -42,14 +77,14 @@ export default function AdminLogin() {
               <Shield size={20} />
             </div>
             <div>
-              <div className="text-lg font-semibold">Instructor login</div>
-              <div className="text-sm text-slate-400">Enter your password (email is fixed in <code className="text-slate-200">.env</code>).</div>
+              <div className="text-lg font-semibold">Login</div>
+              <div className="text-sm text-slate-400">Sign in with the email and password you used to register.</div>
             </div>
           </div>
 
           <div className="mt-6 space-y-3">
             <div>
-              <div className="label mb-1">Instructor email</div>
+              <div className="label mb-1">Email</div>
               <input
                 className="input"
                 type="email"
@@ -70,13 +105,17 @@ export default function AdminLogin() {
             </div>
 
             {error && <div className="text-sm text-red-300">{error}</div>}
+            {resetInfo && <div className="text-sm text-emerald-300">{resetInfo}</div>}
 
             <button className="btn w-full" onClick={login} disabled={busy || password.length === 0 || email.trim().length === 0}>
               {busy ? 'Signing in...' : 'Sign in'}
             </button>
 
-            <div className="text-xs text-slate-400">
-              Tip: create an Email/Password user in Firebase Auth with this email and password.
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+              <button className="underline" onClick={resetPassword}>Forgot password?</button>
+              <span>·</span>
+              <span>Need access?</span>
+              <button className="underline" onClick={() => nav('/instructor/signup')}>Apply to be an instructor</button>
             </div>
           </div>
         </div>

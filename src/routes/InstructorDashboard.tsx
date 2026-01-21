@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import TopBar from '../components/TopBar'
 import { auth, db } from '../firebase'
-import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, where } from 'firebase/firestore'
 import { roomCode } from '../lib/ids'
 import QRCodeCard from '../components/QRCodeCard'
 import QuestionEditor from '../components/QuestionEditor'
@@ -15,106 +16,105 @@ type Resp = { id: string, value: unknown, submittedAt?: any }
 
 export default function InstructorDashboard() {
   const nav = useNavigate()
-  const instructorEmail = useMemo(() => (import.meta.env.VITE_INSTRUCTOR_EMAIL as string) || '', [])
   const [user, setUser] = useState(() => auth.currentUser)
+  const [adminDoc, setAdminDoc] = useState<any | null>(null)
+  const [adminLoaded, setAdminLoaded] = useState(false)
+  const [instructorDoc, setInstructorDoc] = useState<any | null>(null)
+  const [instructorLoaded, setInstructorLoaded] = useState(false)
+  const [adminAgreeLiability, setAdminAgreeLiability] = useState(false)
+  const [adminAgreeCosts, setAdminAgreeCosts] = useState(false)
+  const [adminAgreeRemoval, setAdminAgreeRemoval] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [session, setSession] = useState<any>(null)
   const [questions, setQuestions] = useState<Question[]>([])
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null)
   const [responses, setResponses] = useState<Resp[]>([])
-  const [bootstrapState, setBootstrapState] = useState<'unknown' | 'missing' | 'mismatch' | 'reclaimable' | 'ok'>('unknown')
   const [actionError, setActionError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const [bootstrapping, setBootstrapping] = useState(false)
   const [showExpandedResults, setShowExpandedResults] = useState(false)
   const [sessions, setSessions] = useState<any[]>([])
   const [sessionBusyId, setSessionBusyId] = useState<string | null>(null)
   const [newSessionTitle, setNewSessionTitle] = useState('')
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
+  const [sessionCosts, setSessionCosts] = useState<Record<string, number>>({})
+  const [passwordResetSent, setPasswordResetSent] = useState(false)
+
+  const isAdmin = !!adminDoc && user?.uid === adminDoc.uid
+  const isApprovedInstructor = instructorDoc?.status === 'approved'
+  const canAccessDashboard = isApprovedInstructor
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
       setUser(u)
-      if (!u) nav('/admin', { replace: true })
+      if (!u || u.isAnonymous) {
+        if (u?.isAnonymous) auth.signOut().catch(() => {})
+        nav('/admin', { replace: true })
+      }
     })
     return () => unsub()
   }, [nav])
 
-  // Check bootstrap state (admin doc exists)
   useEffect(() => {
-    let alive = true
-    ;(async () => {
-      if (!user) {
-        setBootstrapState('unknown')
-        return
-      }
-      try {
-        const snap = await getDoc(doc(db, 'config', 'admin'))
-        if (!alive) return
-        if (!snap.exists()) {
-          setBootstrapState('missing')
-          return
-        }
-        const data = snap.data() as any
-        if (data?.uid === user.uid) {
-          setBootstrapState('ok')
-          return
-        }
-        if (user.email && data?.email && data.email === user.email) {
-          setBootstrapState('reclaimable')
-          return
-        }
-        if (user.email && instructorEmail && user.email === instructorEmail) {
-          setBootstrapState('reclaimable')
-          return
-        }
-        setBootstrapState('mismatch')
-      } catch (_err: any) {
-        if (!alive) return
-        setBootstrapState('mismatch')
-      }
-    })()
-    return () => { alive = false }
-  }, [user?.uid, instructorEmail])
+    if (!user || user.isAnonymous) {
+      setAdminDoc(null)
+      setAdminLoaded(true)
+      return
+    }
+    const unsub = onSnapshot(
+      doc(db, 'config', 'admin'),
+      (snap) => {
+        setAdminDoc(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null)
+        setAdminLoaded(true)
+      },
+      (err) => {
+        setActionError(err?.message ?? 'Failed to load admin configuration.')
+        setAdminLoaded(true)
+      },
+    )
+    return () => unsub()
+  }, [user?.uid])
 
-  async function bootstrapInstructor() {
-    if (!auth.currentUser || bootstrapping) return
+  useEffect(() => {
+    if (!user || user.isAnonymous) {
+      setInstructorDoc(null)
+      setInstructorLoaded(false)
+      return
+    }
+    const unsub = onSnapshot(
+      doc(db, 'instructors', user.uid),
+      (snap) => {
+        setInstructorDoc(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null)
+        setInstructorLoaded(true)
+      },
+      (err) => {
+        setActionError(err?.message ?? 'Failed to load instructor status.')
+        setInstructorLoaded(true)
+      },
+    )
+    return () => unsub()
+  }, [user?.uid])
+
+
+  async function claimAdminAccess() {
+    if (!auth.currentUser) return
+    if (!adminAgreeLiability || !adminAgreeCosts || !adminAgreeRemoval) {
+      setActionError('Please acknowledge the instructor terms before continuing.')
+      return
+    }
     setActionError(null)
-    setBootstrapping(true)
     try {
       await setDoc(doc(db, 'config', 'admin'), {
         uid: auth.currentUser.uid,
         email: auth.currentUser.email ?? null,
         createdAt: serverTimestamp(),
       })
-      setBootstrapState('ok')
     } catch (e: any) {
-      setActionError(e?.message ?? 'Failed to bootstrap instructor access.')
-    } finally {
-      setBootstrapping(false)
-    }
-  }
-
-  async function reclaimInstructor() {
-    if (!auth.currentUser || bootstrapping) return
-    setActionError(null)
-    setBootstrapping(true)
-    try {
-      await setDoc(doc(db, 'config', 'admin'), {
-        uid: auth.currentUser.uid,
-        email: auth.currentUser.email ?? null,
-        updatedAt: serverTimestamp(),
-      }, { merge: true })
-      setBootstrapState('ok')
-    } catch (e: any) {
-      setActionError(e?.message ?? 'Failed to reclaim instructor access.')
-    } finally {
-      setBootstrapping(false)
+      setActionError(e?.message ?? 'Failed to claim admin access.')
     }
   }
 
   async function createSession() {
-    if (!auth.currentUser || creating) return
+    if (!auth.currentUser || creating || !canAccessDashboard) return
     setActionError(null)
     setCreating(true)
     try {
@@ -139,13 +139,13 @@ export default function InstructorDashboard() {
 
   // Auto-pick latest session (optional). We'll keep it simple: if none selected, create one.
   useEffect(() => {
-    if (bootstrapState !== 'ok' || sessionId || !sessionsLoaded) return
+    if (!canAccessDashboard || sessionId || !sessionsLoaded) return
     if (sessions.length > 0) {
       setSessionId(sessions[0].id)
       return
     }
     createSession().catch(() => {})
-  }, [sessionId, bootstrapState, sessionsLoaded, sessions])
+  }, [sessionId, canAccessDashboard, sessionsLoaded, sessions])
 
   // Subscribe session
   useEffect(() => {
@@ -158,14 +158,57 @@ export default function InstructorDashboard() {
 
   // Subscribe sessions list
   useEffect(() => {
-    const qRef = query(collection(db, 'sessions'), orderBy('createdAt', 'desc'))
-    const unsub = onSnapshot(qRef, (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
-      setSessions(list)
-      setSessionsLoaded(true)
-    })
+    if (!user || !canAccessDashboard) return
+    const qRef = query(
+      collection(db, 'sessions'),
+      where('ownerUid', '==', user.uid)
+    )
+    const unsub = onSnapshot(
+      qRef,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
+        list.sort((a, b) => {
+          const aTime = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : 0
+          const bTime = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : 0
+          return bTime - aTime
+        })
+        setSessions(list)
+        setSessionsLoaded(true)
+      },
+      (err) => {
+        setActionError(err?.message ?? 'Failed to load sessions.')
+        setSessionsLoaded(true)
+      },
+    )
     return () => unsub()
-  }, [])
+  }, [user?.uid, canAccessDashboard])
+
+  useEffect(() => {
+    if (!user || !canAccessDashboard) {
+      setSessionCosts({})
+      return
+    }
+    const qRef = query(
+      collection(db, 'session_costs'),
+      where('ownerUid', '==', user.uid),
+    )
+    const unsub = onSnapshot(
+      qRef,
+      (snap) => {
+        const next: Record<string, number> = {}
+        snap.docs.forEach((docSnap) => {
+          const data = docSnap.data() as any
+          const totalUsd = typeof data.totalUsd === 'number' ? data.totalUsd : 0
+          next[docSnap.id] = totalUsd
+        })
+        setSessionCosts(next)
+      },
+      (err) => {
+        setActionError(err?.message ?? 'Failed to load cost estimates.')
+      },
+    )
+    return () => unsub()
+  }, [user?.uid, canAccessDashboard])
 
   // Subscribe questions
   useEffect(() => {
@@ -243,18 +286,127 @@ export default function InstructorDashboard() {
     }
   }
 
-  if (!user) return null
-  if (bootstrapState === 'mismatch') {
+  async function requestPasswordReset() {
+    if (!auth.currentUser?.email) {
+      setActionError('No email address found for this account.')
+      return
+    }
+    setActionError(null)
+    try {
+      await sendPasswordResetEmail(auth, auth.currentUser.email)
+      setPasswordResetSent(true)
+      setTimeout(() => setPasswordResetSent(false), 5000)
+    } catch (e: any) {
+      setActionError(e?.message ?? 'Failed to send password reset email.')
+    }
+  }
+
+
+  if (!user || !adminLoaded || !instructorLoaded) return null
+  if (!adminDoc) {
+    const canClaimAdmin = adminAgreeLiability && adminAgreeCosts && adminAgreeRemoval
     return (
       <div>
         <TopBar mode="instructor" />
-        <div className="mx-auto max-w-3xl px-4 py-8">
-          <div className="card p-4 border border-red-500/30 bg-red-500/10">
-            <div className="font-semibold text-red-200">Instructor access required</div>
-            <div className="text-sm text-red-100/80 mt-1">
-              This account is not the configured instructor for this project. Sign out and log in with the instructor email.
+        <div className="mx-auto max-w-3xl px-4 py-8 space-y-4">
+          <div className="card p-4 border border-amber-500/30 bg-amber-500/10">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold text-amber-200 flex items-center gap-2">
+                  <Wand2 size={18} /> Claim admin access
+                </div>
+                <div className="text-sm text-amber-100/80 mt-1">
+                  The first instructor to sign in can claim admin access. This enables you to approve other instructors.
+                </div>
+              </div>
+              <button className="btn" onClick={claimAdminAccess} disabled={!canClaimAdmin}>
+                Claim admin
+              </button>
+            </div>
+            <div className="mt-4 space-y-3 text-sm text-slate-200">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={adminAgreeLiability}
+                  onChange={(e) => setAdminAgreeLiability(e.target.checked)}
+                />
+                I acknowledge the product is provided as-is and the owner accepts no liability for its use.
+              </label>
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={adminAgreeCosts}
+                  onChange={(e) => setAdminAgreeCosts(e.target.checked)}
+                />
+                I understand that extensive use may incur costs and I may be asked to contribute.
+              </label>
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={adminAgreeRemoval}
+                  onChange={(e) => setAdminAgreeRemoval(e.target.checked)}
+                />
+                I understand the owner reserves the right to remove instructor access at any time.
+              </label>
             </div>
           </div>
+          {actionError && (
+            <div className="card p-4 border border-red-500/30 bg-red-500/10">
+              <div className="font-semibold text-red-200">Something went wrong</div>
+              <div className="text-sm text-red-100/80 mt-1">{actionError}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (!canAccessDashboard) {
+    return (
+      <div>
+        <TopBar mode="instructor" />
+        <div className="mx-auto max-w-3xl px-4 py-8 space-y-4">
+          {isAdmin && (
+            <div className="card p-4 border border-amber-500/30 bg-amber-500/10">
+              <div className="font-semibold text-amber-200">Admin account</div>
+              <div className="text-sm text-amber-100/80 mt-1">
+                This account is configured as an admin. Use the admin dashboard to manage instructors.
+              </div>
+              <button className="btn mt-3" onClick={() => nav('/admin/overview')}>
+                Go to admin dashboard
+              </button>
+            </div>
+          )}
+          {instructorDoc?.status === 'pending' && (
+            <div className="card p-4 border border-amber-500/30 bg-amber-500/10">
+              <div className="font-semibold text-amber-200">Approval pending</div>
+              <div className="text-sm text-amber-100/80 mt-1">
+                Your instructor request is pending. You will receive an email when it is approved.
+              </div>
+            </div>
+          )}
+          {instructorDoc?.status === 'removed' && (
+            <div className="card p-4 border border-red-500/30 bg-red-500/10">
+              <div className="font-semibold text-red-200">Access removed</div>
+              <div className="text-sm text-red-100/80 mt-1">
+                Instructor access was removed. Contact the administrator if you believe this is a mistake.
+              </div>
+            </div>
+          )}
+          {!instructorDoc && (
+            <div className="card p-4 border border-slate-700/80 bg-slate-950/30">
+              <div className="font-semibold text-slate-100">Instructor access required</div>
+              <div className="text-sm text-slate-300 mt-1">
+                Submit an instructor application to request access.
+              </div>
+              <button className="btn mt-3" onClick={() => nav('/instructor/signup')}>
+                Apply to be an instructor
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -269,16 +421,20 @@ export default function InstructorDashboard() {
           <div>
             <div className="text-2xl font-semibold">Instructor dashboard</div>
             <div className="text-slate-400 mt-1">Create questions, set one as active, and show results live.</div>
+            <div className="text-xs text-slate-500 mt-2">Cost estimates are approximate and may not match billed totals.</div>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap justify-end">
             <input
               className="input"
               value={newSessionTitle}
               onChange={(e) => setNewSessionTitle(e.target.value)}
               placeholder="Session name"
             />
-            <button className="btn" onClick={createSession} disabled={creating || bootstrapState !== 'ok'}>
+            <button className="btn" onClick={createSession} disabled={creating || !canAccessDashboard}>
               {creating ? 'Creating...' : 'New session'}
+            </button>
+            <button className="btn-ghost" onClick={requestPasswordReset}>
+              Change password
             </button>
           </div>
         </div>
@@ -290,49 +446,13 @@ export default function InstructorDashboard() {
           </div>
         )}
 
-        {bootstrapState === 'missing' && (
-          <div className="card p-4 border border-amber-500/30 bg-amber-500/10">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="font-semibold text-amber-200 flex items-center gap-2">
-                  <Wand2 size={18} /> Bootstrap instructor access (one-time)
-                </div>
-                <div className="text-sm text-amber-100/80 mt-1">
-                  Firestore rules are set to allow the <em>first authenticated user</em> to write the instructor UID to <code>/config/admin</code>.
-                  Do this once, then only your account can create/update sessions and questions.
-                </div>
-              </div>
-              <button className="btn" onClick={bootstrapInstructor} disabled={bootstrapping}>
-                {bootstrapping ? 'Bootstrapping...' : 'Bootstrap now'}
-              </button>
-            </div>
+        {passwordResetSent && (
+          <div className="card p-4 border border-emerald-500/30 bg-emerald-500/10">
+            <div className="font-semibold text-emerald-200">Password reset sent</div>
+            <div className="text-sm text-emerald-100/80 mt-1">Check your email for a reset link.</div>
           </div>
         )}
 
-        {bootstrapState === 'reclaimable' && (
-          <div className="card p-4 border border-amber-500/30 bg-amber-500/10">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="font-semibold text-amber-200">Reclaim instructor access</div>
-                <div className="text-sm text-amber-100/80 mt-1">
-                  This account matches the instructor email, but the stored UID is different. Reclaim access to continue.
-                </div>
-              </div>
-              <button className="btn" onClick={reclaimInstructor} disabled={bootstrapping}>
-                {bootstrapping ? 'Updating...' : 'Reclaim access'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {bootstrapState === 'mismatch' && (
-          <div className="card p-4 border border-red-500/30 bg-red-500/10">
-            <div className="font-semibold text-red-200">Instructor access required</div>
-            <div className="text-sm text-red-100/80 mt-1">
-              This account is not the configured instructor for this project. Sign out and log in with the instructor email.
-            </div>
-          </div>
-        )}
 
         <div className="grid lg:grid-cols-3 gap-6 items-start">
           <div className="card p-4 lg:col-span-1">
@@ -346,6 +466,7 @@ export default function InstructorDashboard() {
                   const isActive = s.id === sessionId
                   const label = s.title || 'Class session'
                   const code = s.roomCode || '------'
+                  const cost = sessionCosts[s.id] ?? 0
                   return (
                     <div
                       key={s.id}
@@ -355,6 +476,7 @@ export default function InstructorDashboard() {
                         <div className="min-w-0">
                           <div className="text-sm font-medium truncate">{label}</div>
                           <div className="text-xs text-slate-400 mt-1">Room: {code}</div>
+                          <div className="text-xs text-slate-400 mt-1">Est. cost: {formatUsd(cost)}</div>
                         </div>
                         {isActive && <span className="text-xs text-slate-300">Current</span>}
                       </div>
@@ -465,8 +587,14 @@ export default function InstructorDashboard() {
 
 function label(t: string) {
   if (t === 'mcq') return 'Multiple choice'
-  if (t === 'pie') return 'Pie (100-point allocation)'
+  if (t === 'pie') return '100 point allocation'
   if (t === 'number') return 'Numerical'
   if (t === 'short') return 'Short text'
   return 'Extended text'
+}
+
+function formatUsd(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '$0.00'
+  if (value < 0.01) return `$${value.toFixed(4)}`
+  return `$${value.toFixed(2)}`
 }

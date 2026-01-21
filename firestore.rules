@@ -2,19 +2,78 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Public sessions/rooms: readable by anyone (so students can join)
-    match /sessions/{sessionId} {
-      allow read: if true;
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-      // Only instructor can create/update/delete sessions
-      allow create, update, delete: if isInstructor();
+    function isSignedInNonAnon() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isAnonymous() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    function isAdmin() {
+      return isSignedInNonAnon()
+        && exists(/databases/$(database)/documents/config/admin)
+        && get(/databases/$(database)/documents/config/admin).data.uid == request.auth.uid;
+    }
+
+    function isApprovedInstructor() {
+      return isSignedInNonAnon()
+        && exists(/databases/$(database)/documents/instructors/$(request.auth.uid))
+        && get(/databases/$(database)/documents/instructors/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    function sessionOwnerUid(sessionId) {
+      return get(/databases/$(database)/documents/sessions/$(sessionId)).data.ownerUid;
+    }
+
+    function isSessionOwner(sessionId) {
+      return isSignedInNonAnon()
+        && exists(/databases/$(database)/documents/sessions/$(sessionId))
+        && sessionOwnerUid(sessionId) == request.auth.uid;
+    }
+
+    function hasAcceptedTerms() {
+      return request.resource.data.agreements.liability == true
+        && request.resource.data.agreements.costs == true
+        && request.resource.data.agreements.removal == true;
+    }
+
+    function isActiveQuestionPublic(sessionId, questionId) {
+      return exists(/databases/$(database)/documents/sessions/$(sessionId))
+        && get(/databases/$(database)/documents/sessions/$(sessionId)).data.activeQuestionId == questionId;
+    }
+
+    // Sessions
+    match /sessions/{sessionId} {
+      allow read: if isAnonymous()
+        || isAdmin()
+        || (isApprovedInstructor() && resource.data.ownerUid == request.auth.uid);
+
+      allow create: if isAdmin()
+        || (isApprovedInstructor()
+          && request.resource.data.ownerUid == request.auth.uid);
+
+      allow update, delete: if isAdmin()
+        || (isApprovedInstructor() && resource.data.ownerUid == request.auth.uid);
 
       match /questions/{questionId} {
-        allow read: if true;
-        allow create, update, delete: if isInstructor();
+        allow read: if isAdmin()
+          || (isApprovedInstructor() && sessionOwnerUid(sessionId) == request.auth.uid)
+          || isActiveQuestionPublic(sessionId, questionId);
+
+        allow create, update, delete: if isAdmin()
+          || (isApprovedInstructor() && sessionOwnerUid(sessionId) == request.auth.uid);
 
         match /responses/{responseId} {
-          allow read: if isInstructor() || isActiveQuestionPublic(sessionId, questionId);
+          allow read: if isAdmin()
+            || (isApprovedInstructor() && sessionOwnerUid(sessionId) == request.auth.uid)
+            || isActiveQuestionPublic(sessionId, questionId);
           // Students can create/update only their own response doc (docId == uid),
           // with a 1-minute cooldown between submissions.
           allow create: if request.auth != null
@@ -31,43 +90,43 @@ service cloud.firestore {
       }
     }
 
-    // Helper: store the instructor UID in /config/admin (field: uid)
+    // Instructors (applications + approvals)
+    match /instructors/{instructorId} {
+      allow read: if isAdmin() || (isSignedInNonAnon() && request.auth.uid == instructorId);
+      allow create: if isAdmin()
+        || (isSignedInNonAnon()
+          && request.auth.uid == instructorId
+          && request.resource.data.email == request.auth.token.email
+          && (
+            (!exists(/databases/$(database)/documents/config/admin)
+              && request.resource.data.status == 'approved')
+            || request.resource.data.status == 'pending'
+          )
+          && hasAcceptedTerms());
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Helper: store the admin UID in /config/admin (field: uid)
     match /config/admin {
-      allow read: if request.auth != null
-        && request.auth.token.firebase.sign_in_provider != 'anonymous';
-      allow write: if isBootstrapAdminWrite() || isReclaimAdminWrite() || isConfiguredInstructorEmail();
-    }
-
-    function isInstructor() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/config/admin)
-        && get(/databases/$(database)/documents/config/admin).data.uid == request.auth.uid;
-    }
-
-    // Bootstrap: allow first authenticated user to write /config/admin if it does not exist yet.
-    // You will do this once from the /admin page after signing in as instructor.
-    function isBootstrapAdminWrite() {
-      return request.auth != null
+      allow read: if isSignedInNonAnon();
+      allow create: if isSignedInNonAnon()
         && !exists(/databases/$(database)/documents/config/admin);
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
-    function isReclaimAdminWrite() {
-      return request.auth != null
-        && request.auth.token.firebase.sign_in_provider != 'anonymous'
-        && exists(/databases/$(database)/documents/config/admin)
-        && request.auth.token.email != null
-        && get(/databases/$(database)/documents/config/admin).data.email == request.auth.token.email;
+    match /session_costs/{sessionId} {
+      allow read: if isAdmin()
+        || (isApprovedInstructor()
+          && resource.data.ownerUid == request.auth.uid);
+      allow write: if false;
     }
 
-    function isConfiguredInstructorEmail() {
-      return request.auth != null
-        && request.auth.token.firebase.sign_in_provider != 'anonymous'
-        && request.auth.token.email == "siemsene@gmail.com";
-    }
-
-    function isActiveQuestionPublic(sessionId, questionId) {
-      return exists(/databases/$(database)/documents/sessions/$(sessionId))
-        && get(/databases/$(database)/documents/sessions/$(sessionId)).data.activeQuestionId == questionId;
+    match /instructor_costs/{instructorId} {
+      allow read: if isAdmin()
+        || (isApprovedInstructor() && request.auth.uid == instructorId);
+      allow write: if false;
     }
   }
 }

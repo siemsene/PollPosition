@@ -16,11 +16,12 @@ type SynthesisInput = {
   question?: string
   items: string[]
   mode?: 'grouped' | 'summary'
+  sessionId?: string
 }
 
-export async function synthesizeShortResponses({ question, items, mode = 'grouped' }: SynthesisInput) {
+export async function synthesizeShortResponses({ question, items, mode = 'grouped', sessionId }: SynthesisInput) {
   const call = httpsCallable(functions, 'synthesizeShortResponses')
-  const result = await call({ question: question ?? null, items, mode })
+  const result = await call({ question: question ?? null, items, mode, sessionId: sessionId ?? null })
   const data = result.data as any
 
   const groups = Array.isArray(data?.groups)

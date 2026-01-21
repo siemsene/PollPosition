@@ -3,7 +3,7 @@ import { LogOut, Presentation, Users } from 'lucide-react'
 import { signOut } from 'firebase/auth'
 import { auth } from '../firebase'
 
-export default function TopBar({ mode }: { mode: 'student' | 'instructor' }) {
+export default function TopBar({ mode }: { mode: 'student' | 'instructor' | 'admin' }) {
   const loc = useLocation()
   const nav = useNavigate()
   return (
@@ -15,7 +15,9 @@ export default function TopBar({ mode }: { mode: 'student' | 'instructor' }) {
           </div>
           <div className="leading-tight">
             <div className="font-semibold">PollPosition</div>
-            <div className="text-xs text-slate-400">{mode === 'instructor' ? 'Instructor' : 'Student'}</div>
+            <div className="text-xs text-slate-400">
+              {mode === 'instructor' ? 'Instructor' : mode === 'admin' ? 'Admin' : 'Student'}
+            </div>
           </div>
         </div>
 
