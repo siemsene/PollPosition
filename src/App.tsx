@@ -6,6 +6,8 @@ import AdminDashboard from './routes/AdminDashboard'
 import InstructorDashboard from './routes/InstructorDashboard'
 import InstructorSignup from './routes/InstructorSignup'
 import PublicResults from './routes/PublicResults'
+import PublicResultsGraph from './routes/PublicResultsGraph'
+import DisplayInstructions from './routes/DisplayInstructions'
 
 export default function App() {
   return (
@@ -17,6 +19,8 @@ export default function App() {
       <Route path="/instructor/signup" element={<InstructorSignup />} />
       <Route path="/admin/dashboard" element={<InstructorDashboard />} />
       <Route path="/results" element={<PublicResults />} />
+      <Route path="/results/graph" element={<PublicResultsGraph />} />
+      <Route path="/instructions" element={<DisplayInstructions />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

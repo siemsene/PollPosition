@@ -6,6 +6,10 @@
   color-scheme: dark;
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
 * { -webkit-tap-highlight-color: transparent; }
 
 body {
@@ -17,8 +21,23 @@ body {
     linear-gradient(180deg, #0b1220 0%, #0a0f1a 100%);
 }
 
+:root[data-theme="light"] body {
+  background-color: #f8fafc;
+  color: #0f172a;
+  background-image:
+    radial-gradient(circle at 18% 20%, rgba(56, 189, 248, 0.12), transparent 45%),
+    radial-gradient(circle at 85% 0%, rgba(14, 116, 144, 0.08), transparent 45%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+}
+
 .card {
   @apply rounded-2xl bg-slate-900/90 border border-slate-600/70 shadow-xl;
+}
+
+:root[data-theme="light"] .card {
+  background-color: rgba(255, 255, 255, 0.96);
+  border-color: rgba(148, 163, 184, 0.5);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
 }
 
 .btn {
@@ -31,6 +50,15 @@ body {
          bg-transparent text-slate-100 hover:bg-slate-800/70 transition;
 }
 
+:root[data-theme="light"] .btn-ghost {
+  color: #0f172a;
+  background-color: transparent;
+}
+
+:root[data-theme="light"] .btn-ghost:hover {
+  background-color: rgba(148, 163, 184, 0.2);
+}
+
 .input {
   @apply w-full rounded-xl bg-slate-950 border border-slate-500 px-3 py-2
          text-slate-100 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-300/50;
@@ -40,6 +68,55 @@ body {
   @apply w-full rounded-xl bg-slate-950 border border-slate-500 px-3 py-2
          text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-300/50;
 }
+
+:root[data-theme="light"] .input,
+:root[data-theme="light"] .select {
+  background-color: #ffffff;
+  border-color: rgba(148, 163, 184, 0.7);
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .input::placeholder {
+  color: rgba(100, 116, 139, 0.9);
+}
+
+:root[data-theme="light"] .topbar {
+  background-color: rgba(248, 250, 252, 0.8);
+  border-bottom-color: rgba(148, 163, 184, 0.6);
+}
+
+:root[data-theme="light"] .question-active {
+  background-color: rgba(15, 23, 42, 0.08);
+  border-color: rgba(15, 23, 42, 0.25);
+}
+
+:root[data-theme="light"] .question-active-label {
+  color: #0f172a !important;
+}
+
+:root[data-theme="light"] .session-card {
+  background-color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(15, 23, 42, 0.18);
+}
+
+:root[data-theme="light"] .session-card:hover {
+  background-color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(15, 23, 42, 0.26);
+}
+
+:root[data-theme="light"] .light-warning {
+  color: #b45309 !important;
+}
+
+:root[data-theme="light"] .text-slate-100 { color: #0f172a !important; }
+:root[data-theme="light"] .text-slate-200 { color: #1e293b !important; }
+:root[data-theme="light"] .text-slate-300 { color: #334155 !important; }
+:root[data-theme="light"] .text-slate-400 { color: #475569 !important; }
+:root[data-theme="light"] .text-slate-500 { color: #64748b !important; }
+:root[data-theme="light"] .text-slate-600 { color: #475569 !important; }
+:root[data-theme="light"] .text-slate-700 { color: #334155 !important; }
+:root[data-theme="light"] .text-slate-800 { color: #1e293b !important; }
+:root[data-theme="light"] .text-slate-900 { color: #0f172a !important; }
 
 .label { @apply text-sm text-slate-300; }
 

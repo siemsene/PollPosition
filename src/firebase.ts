@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, signInAnonymously } from 'firebase/auth'
+import { getAuth, onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
 
@@ -22,6 +22,13 @@ export const functions = getFunctions(app, 'us-central1')
 
 export async function ensureAnonymousAuth() {
   if (auth.currentUser) return auth.currentUser
+  const existing = await new Promise<User | null>((resolve) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      unsub()
+      resolve(u)
+    })
+  })
+  if (existing) return existing
   const cred = await signInAnonymously(auth)
   return cred.user
 }

@@ -54,13 +54,63 @@ async function resolveSessionOwner(sessionId) {
   return snap.data()?.ownerUid ?? null
 }
 
-async function sendEmail({ to, subject, text }) {
+function renderEmailHtml({ title, preheader, body }) {
+  const safeTitle = title || 'PollPosition'
+  const safePreheader = preheader || ''
+  const safeBody = body || ''
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${safeTitle}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#0b1220;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+    <span style="display:none;visibility:hidden;opacity:0;height:0;width:0;color:transparent;mso-hide:all;">
+      ${safePreheader}
+    </span>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0b1220;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;">
+            <tr>
+              <td style="padding:20px 24px;background:#0f172a;color:#ffffff;font-weight:bold;letter-spacing:0.3px;">
+                PollPosition
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px;">
+                <h1 style="margin:0 0 12px 0;font-size:20px;line-height:1.3;color:#0f172a;">${safeTitle}</h1>
+                <div style="font-size:14px;line-height:1.6;color:#334155;">
+                  ${safeBody}
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 24px;background:#f8fafc;color:#64748b;font-size:12px;line-height:1.5;">
+                You are receiving this email because you are listed as an instructor or admin for PollPosition.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+}
+
+async function sendEmail({ to, subject, text, htmlTitle, htmlBody, preheader }) {
   const apiKey = process.env.SMTP2GO_API_KEY
   const from = process.env.EMAIL_FROM
+  const fromName = process.env.EMAIL_FROM_NAME
+  const replyTo = process.env.EMAIL_REPLY_TO
+  const subjectPrefix = process.env.EMAIL_SUBJECT_PREFIX || 'PollPosition'
   if (!apiKey || !from) {
     console.warn('Email not configured. Set SMTP2GO_API_KEY and EMAIL_FROM to enable email notifications.')
     return
   }
+  const sender = fromName ? `${fromName} <${from}>` : from
+  const fullSubject = subjectPrefix ? `${subjectPrefix}: ${subject}` : subject
   const res = await fetch('https://api.smtp2go.com/v3/email/send', {
     method: 'POST',
     headers: {
@@ -69,9 +119,11 @@ async function sendEmail({ to, subject, text }) {
     body: JSON.stringify({
       api_key: apiKey,
       to: [to],
-      sender: from,
-      subject,
+      sender,
+      reply_to: replyTo || undefined,
+      subject: fullSubject,
       text_body: text,
+      html_body: htmlBody ? renderEmailHtml({ title: htmlTitle || subject, preheader, body: htmlBody }) : undefined,
     }),
   })
   if (!res.ok) {
@@ -202,6 +254,7 @@ exports.notifyAdminOfNewInstructors = onSchedule(
   { region: 'us-central1', schedule: 'every day 08:00' },
   async () => {
     const adminEmail = process.env.ADMIN_EMAIL
+    const appUrl = process.env.APP_URL
     if (!adminEmail) {
       console.warn('ADMIN_EMAIL is not set; skipping daily instructor digest.')
       return
@@ -218,10 +271,21 @@ exports.notifyAdminOfNewInstructors = onSchedule(
       const status = data.status ? ` (${data.status})` : ''
       return `- ${data.email ?? doc.id}${status}`
     })
+    const dashboardLine = appUrl ? `\nAdmin dashboard: ${appUrl.replace(/\/$/, '')}/admin\n` : ''
     await sendEmail({
       to: adminEmail,
-      subject: `New instructor signups today (${snap.size})`,
-      text: `New instructor signups were submitted today:\n${lines.join('\n')}\n\nReview them in the admin dashboard.`,
+      subject: `New instructor signups (${snap.size})`,
+      text:
+        `New instructor signups were submitted today:\n${lines.join('\n')}\n` +
+        `${dashboardLine}\n` +
+        'You are receiving this email because ADMIN_EMAIL is set for this project.',
+      htmlTitle: `New instructor signups (${snap.size})`,
+      preheader: `${snap.size} new instructor signup${snap.size === 1 ? '' : 's'} today.`,
+      htmlBody:
+        `<p>The following instructor signups were submitted today:</p>` +
+        `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>` +
+        (appUrl ? `<p><a href="${appUrl.replace(/\/$/, '')}/admin">Open the admin dashboard</a></p>` : '') +
+        `<p style="color:#64748b;font-size:12px;">You are receiving this email because ADMIN_EMAIL is set for this project.</p>`,
     })
   },
 )
@@ -233,13 +297,51 @@ exports.notifyInstructorApproved = onDocumentUpdated(
     const after = event.data?.after?.data() || {}
     if (before.status === 'approved' || after.status !== 'approved') return
     if (!after.email) return
+    const appUrl = process.env.APP_URL
+    const signInLine = appUrl ? `\nSign in: ${appUrl.replace(/\/$/, '')}/admin\n` : ''
     await sendEmail({
       to: after.email,
-      subject: 'Your instructor access is approved',
-      text: 'Your instructor account has been approved. You can now sign in and create sessions and questions.',
+      subject: 'Instructor access approved',
+      text:
+        'Your instructor access has been approved. You can now sign in and create sessions and questions.' +
+        signInLine +
+        '\nIf you did not request instructor access, you can ignore this email.',
+      htmlTitle: 'Instructor access approved',
+      preheader: 'You can now sign in and create sessions.',
+      htmlBody:
+        '<p>Your instructor access has been approved. You can now sign in and create sessions and questions.</p>' +
+        (appUrl ? `<p><a href="${appUrl.replace(/\/$/, '')}/admin">Sign in to PollPosition</a></p>` : '') +
+        '<p style="color:#64748b;font-size:12px;">If you did not request instructor access, you can ignore this email.</p>',
     })
   },
 )
+
+exports.cleanupOldSessions = onSchedule(
+  { region: 'us-central1', schedule: 'every day 03:00' },
+  async () => {
+    const cutoff = Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const snap = await db.collection('sessions')
+      .where('createdAt', '<', cutoff)
+      .get()
+    if (snap.empty) return
+    const deletions = snap.docs.map(async (docSnap) => {
+      await Promise.allSettled([
+        db.recursiveDelete(docSnap.ref),
+        db.doc(`session_costs/${docSnap.id}`).delete().catch(() => {}),
+      ])
+    })
+    await Promise.allSettled(deletions)
+  },
+)
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
 exports.trackSessionWrites = onDocumentWritten(
   { region: 'us-central1', document: 'sessions/{sessionId}' },

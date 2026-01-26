@@ -37,6 +37,10 @@ export default function InstructorSignup() {
     setBusy(true)
     try {
       let currentUser = user
+      if (currentUser?.isAnonymous) {
+        await auth.signOut()
+        currentUser = null
+      }
       if (!currentUser) {
         if (!email.trim() || password.length < 6) {
           setError('Use a valid email and a password with at least 6 characters.')
@@ -100,7 +104,7 @@ export default function InstructorSignup() {
             </div>
           ) : (
             <>
-              {user ? (
+              {user && !user.isAnonymous ? (
                 <div className="text-sm text-slate-300">
                   Signed in as <span className="text-slate-100">{user.email ?? 'instructor'}</span>. Submit your application to request access.
                 </div>

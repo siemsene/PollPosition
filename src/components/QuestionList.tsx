@@ -96,7 +96,7 @@ export default function QuestionList({
           questions.map((q) => (
             <div
               key={q.id}
-              className={`rounded-2xl border transition ${
+              className={`rounded-2xl border transition ${q.id === activeQuestionId ? 'question-active' : ''} ${
                 q.id === activeQuestionId
                   ? 'border-white/30 bg-white/10'
                   : 'border-slate-700/80 bg-slate-950/30 hover:bg-slate-900/40'
@@ -119,7 +119,7 @@ export default function QuestionList({
                       </div>
                     )}
                   </div>
-                  <div className={`shrink-0 inline-flex items-center gap-2 text-xs ${q.id === activeQuestionId ? 'text-white' : 'text-slate-400'}`}>
+                  <div className={`shrink-0 inline-flex items-center gap-2 text-xs ${q.id === activeQuestionId ? 'text-white question-active-label' : 'text-slate-400'}`}>
                     <Play size={16} /> Active
                   </div>
                 </div>

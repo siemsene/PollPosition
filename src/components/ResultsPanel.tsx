@@ -18,6 +18,8 @@ export default function ResultsPanel({
   question,
   onExpand,
   variant = 'normal',
+  showHeader = true,
+  frameless = false,
   allowSynthesis = false,
   synthesisFromStore = null,
   synthesizedCountFromStore = null,
@@ -29,6 +31,8 @@ export default function ResultsPanel({
   question?: string
   onExpand?: () => void
   variant?: 'normal' | 'expanded'
+  showHeader?: boolean
+  frameless?: boolean
   allowSynthesis?: boolean
   synthesisFromStore?: SynthesisResult | null
   synthesizedCountFromStore?: number | null
@@ -154,37 +158,39 @@ export default function ResultsPanel({
   }
 
   return (
-    <div className="card p-4">
-      <div className="flex items-end justify-between gap-3 flex-wrap">
-        <div>
-          <div className="font-semibold">Live results</div>
-          <div className="text-sm text-slate-400">{responses.length} response(s)</div>
+    <div className={frameless ? '' : 'card p-4'}>
+      {showHeader && (
+        <div className="flex items-end justify-between gap-3 flex-wrap">
+          <div>
+            <div className="font-semibold">Live results</div>
+            <div className="text-sm text-slate-400">{responses.length} response(s)</div>
+          </div>
+          <div className="flex items-center gap-3">
+            {type === 'number' && (
+              <div className="text-xs text-slate-400 text-right">
+                <div>n = {numData.n}</div>
+                <div>mean = {numData.mean === null ? 'n/a' : round2(numData.mean)}</div>
+                <div>median = {numData.median === null ? 'n/a' : round2(numData.median)}</div>
+              </div>
+            )}
+            {canSynthesize && (
+              <button
+                className="btn-ghost"
+                onClick={handleSynthesize}
+                disabled={synthesizing || synthesisItemCount === 0}
+                title="Synthesize responses"
+              >
+                {synthesizing ? 'Synthesizing...' : 'Synthesize'}
+              </button>
+            )}
+            {onExpand && (
+              <button className="btn-ghost" onClick={onExpand} title="Expand results">
+                <Maximize2 size={16} /> Expand
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {type === 'number' && (
-            <div className="text-xs text-slate-400 text-right">
-              <div>n = {numData.n}</div>
-              <div>mean = {numData.mean === null ? 'n/a' : round2(numData.mean)}</div>
-              <div>median = {numData.median === null ? 'n/a' : round2(numData.median)}</div>
-            </div>
-          )}
-          {canSynthesize && (
-            <button
-              className="btn-ghost"
-              onClick={handleSynthesize}
-              disabled={synthesizing || synthesisItemCount === 0}
-              title="Synthesize responses"
-            >
-              {synthesizing ? 'Synthesizing...' : 'Synthesize'}
-            </button>
-          )}
-          {onExpand && (
-            <button className="btn-ghost" onClick={onExpand} title="Expand results">
-              <Maximize2 size={16} /> Expand
-            </button>
-          )}
-        </div>
-      </div>
+      )}
       <div className="mt-4">
         {(type === 'mcq' || type === 'number') && (
           <div className={isExpanded ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative' : 'h-[320px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative'}>

@@ -422,17 +422,9 @@ export default function InstructorDashboard() {
             <div className="text-2xl font-semibold">Instructor dashboard</div>
             <div className="text-slate-400 mt-1">Create questions, set one as active, and show results live.</div>
             <div className="text-xs text-slate-500 mt-2">Cost estimates are approximate and may not match billed totals.</div>
+            <div className="text-xs text-amber-300/80 light-warning mt-1">Sessions are automatically removed 30 days after creation.</div>
           </div>
-          <div className="flex gap-2 items-center flex-wrap justify-end">
-            <input
-              className="input"
-              value={newSessionTitle}
-              onChange={(e) => setNewSessionTitle(e.target.value)}
-              placeholder="Session name"
-            />
-            <button className="btn" onClick={createSession} disabled={creating || !canAccessDashboard}>
-              {creating ? 'Creating...' : 'New session'}
-            </button>
+          <div className="flex items-center gap-2">
             <button className="btn-ghost" onClick={requestPasswordReset}>
               Change password
             </button>
@@ -454,6 +446,28 @@ export default function InstructorDashboard() {
         )}
 
 
+        <div className="card p-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <div className="font-semibold">Create a new session</div>
+              <div className="text-sm text-slate-400 mt-1">
+                Start a new room for students. Questions are associated with sessions.
+              </div>
+            </div>
+            <div className="flex gap-2 items-center flex-wrap">
+              <input
+                className="input"
+                value={newSessionTitle}
+                onChange={(e) => setNewSessionTitle(e.target.value)}
+                placeholder="Session name"
+              />
+              <button className="btn" onClick={createSession} disabled={creating || !canAccessDashboard}>
+                {creating ? 'Creating...' : 'New session'}
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="grid lg:grid-cols-3 gap-6 items-start">
           <div className="card p-4 lg:col-span-1">
             <div className="font-semibold">Sessions</div>
@@ -470,7 +484,7 @@ export default function InstructorDashboard() {
                   return (
                     <div
                       key={s.id}
-                      className={`rounded-2xl border px-3 py-3 ${isActive ? 'border-white/30 bg-white/10' : 'border-slate-700/80 bg-slate-950/30'}`}
+                      className={`rounded-2xl border px-3 py-3 session-card ${isActive ? 'border-white/30 bg-white/10' : 'border-slate-700/80 bg-slate-950/30'}`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">

@@ -137,6 +137,35 @@ export default function AdminDashboard() {
     }
   }
 
+  function downloadInstructorCsv() {
+    if (!isAdmin) return
+    const header = ['uid', 'email', 'status', 'requestedAt', 'approvedAt', 'removedAt']
+    const rows = instructors.map((inst) => {
+      const requestedAt = formatTimestamp(inst.requestedAt)
+      const approvedAt = formatTimestamp(inst.approvedAt)
+      const removedAt = formatTimestamp(inst.removedAt)
+      return [
+        inst.id ?? '',
+        inst.email ?? '',
+        inst.status ?? '',
+        requestedAt,
+        approvedAt,
+        removedAt,
+      ]
+    })
+    const csv = [header, ...rows]
+      .map((row) => row.map((cell) => csvCell(cell)).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const stamp = new Date().toISOString().slice(0, 10)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `instructors-${stamp}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   if (!user || !adminLoaded) return null
 
   if (!isAdmin) {
@@ -165,7 +194,12 @@ export default function AdminDashboard() {
           <div className="text-xs text-slate-500 mt-2">Cost estimates are approximate and may not match billed totals.</div>
         </div>
         <div>
-          <button className="btn-ghost" onClick={resetPassword}>Reset password</button>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-ghost" onClick={resetPassword}>Reset password</button>
+            <button className="btn-ghost" onClick={downloadInstructorCsv}>
+              Download instructors CSV
+            </button>
+          </div>
         </div>
 
         {actionError && (
@@ -231,4 +265,19 @@ function formatUsd(value: number) {
   if (!Number.isFinite(value) || value <= 0) return '$0.00'
   if (value < 0.01) return `$${value.toFixed(4)}`
   return `$${value.toFixed(2)}`
+}
+
+function formatTimestamp(value: any) {
+  if (!value) return ''
+  if (typeof value.toMillis === 'function') {
+    return new Date(value.toMillis()).toISOString()
+  }
+  if (value instanceof Date) return value.toISOString()
+  return String(value)
+}
+
+function csvCell(value: unknown) {
+  const raw = value === null || value === undefined ? '' : String(value)
+  const escaped = raw.replace(/"/g, '""')
+  return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped
 }

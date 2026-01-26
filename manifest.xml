@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="ContentApp">
+
+  <Id>7a9584f0-f9ed-11f0-b558-0800200c9a66</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>EnnoSiemsen</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+
+  <DisplayName DefaultValue="Deck Webpage Viewer"/>
+  <Description DefaultValue="Display a webpage on a slide (if iframe-embeddable)."/>
+  <SupportUrl DefaultValue="https://localhost:3000"/>
+
+  <Hosts>
+    <Host Name="Presentation"/>
+  </Hosts>
+
+  <DefaultSettings>
+    <!-- IMPORTANT: point this to the page your dev server serves -->
+    <SourceLocation DefaultValue="https://edutool.org/office-addins/deck-webpage-viewer/taskpane.html" />
+    <RequestedWidth>960</RequestedWidth>
+    <RequestedHeight>540</RequestedHeight>
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>

@@ -32,13 +32,13 @@ export default function StudentHome() {
       <div className="mx-auto max-w-lg px-4 py-10">
         <div className="card p-6">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-white/10 border border-slate-800 flex items-center justify-center">
-              <QrCode size={20} />
-            </div>
-            <div>
-              <div className="text-lg font-semibold">Join a room</div>
-              <div className="text-sm text-slate-400">Scan the QR code or enter the 6-character room code.</div>
-            </div>
+              <div className="h-10 w-10 rounded-2xl bg-white/10 border border-slate-800 flex items-center justify-center">
+                <QrCode size={20} />
+              </div>
+              <div>
+                <div className="text-lg font-semibold">Join a room</div>
+                <div className="text-sm text-slate-400">Scan the QR code or enter the 6-character room code.</div>
+              </div>
           </div>
 
           <div className="mt-6 space-y-3">

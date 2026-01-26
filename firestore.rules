@@ -51,7 +51,8 @@ service cloud.firestore {
 
     // Sessions
     match /sessions/{sessionId} {
-      allow read: if isAnonymous()
+      // Allow any signed-in user (including anonymous) to read sessions for live results links.
+      allow read: if isSignedIn()
         || isAdmin()
         || (isApprovedInstructor() && resource.data.ownerUid == request.auth.uid);
 
