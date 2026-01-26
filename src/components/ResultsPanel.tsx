@@ -20,6 +20,8 @@ export default function ResultsPanel({
   variant = 'normal',
   showHeader = true,
   frameless = false,
+  fitHeight = false,
+  showSynthesis = true,
   allowSynthesis = false,
   synthesisFromStore = null,
   synthesizedCountFromStore = null,
@@ -33,6 +35,8 @@ export default function ResultsPanel({
   variant?: 'normal' | 'expanded'
   showHeader?: boolean
   frameless?: boolean
+  fitHeight?: boolean
+  showSynthesis?: boolean
   allowSynthesis?: boolean
   synthesisFromStore?: SynthesisResult | null
   synthesizedCountFromStore?: number | null
@@ -157,8 +161,24 @@ export default function ResultsPanel({
     }
   }
 
+  const wrapperClass = [
+    frameless ? '' : 'card p-4',
+    fitHeight ? 'h-full' : '',
+  ].filter(Boolean).join(' ')
+  const contentClass = fitHeight ? 'h-full' : 'mt-4'
+  const chartBoxClass = fitHeight
+    ? 'h-full w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative'
+    : (isExpanded
+      ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative'
+      : 'h-[320px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative')
+  const wordCloudClass = fitHeight
+    ? 'h-full w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2'
+    : (isExpanded
+      ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2'
+      : 'h-[360px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2')
+
   return (
-    <div className={frameless ? '' : 'card p-4'}>
+    <div className={wrapperClass}>
       {showHeader && (
         <div className="flex items-end justify-between gap-3 flex-wrap">
           <div>
@@ -191,9 +211,9 @@ export default function ResultsPanel({
           </div>
         </div>
       )}
-      <div className="mt-4">
+      <div className={contentClass}>
         {(type === 'mcq' || type === 'number') && (
-          <div className={isExpanded ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative' : 'h-[320px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative'}>
+          <div className={chartBoxClass}>
             {question && (
               <>
                 <div className="absolute left-3 right-3 top-2 text-lg font-semibold text-slate-700 pointer-events-none text-center">
@@ -229,7 +249,7 @@ export default function ResultsPanel({
         )}
 
         {type === 'pie' && (
-          <div className={isExpanded ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative' : 'h-[320px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative'}>
+          <div className={chartBoxClass}>
             {question && (
               <>
                 <div className="absolute left-3 right-3 top-2 text-lg font-semibold text-slate-700 pointer-events-none text-center">
@@ -270,9 +290,9 @@ export default function ResultsPanel({
           <div className="space-y-4">
             <ShortTextCanvas
               items={shortItems}
-              height={isExpanded ? 520 : 360}
+              height={fitHeight ? undefined : (isExpanded ? 520 : 360)}
             />
-            {(canSynthesize || synthesis) && (
+            {showSynthesis && (canSynthesize || synthesis) && (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-semibold text-slate-700">Synthesis</div>
@@ -316,14 +336,14 @@ export default function ResultsPanel({
 
         {type === 'long' && (
           <div className="space-y-4">
-            <div className={isExpanded ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2' : 'h-[360px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2'}>
+            <div className={wordCloudClass}>
               {words.length === 0 ? (
                 <div className="text-slate-600 text-sm p-3">No answers yet.</div>
               ) : (
                 <WordCloudCanvas words={words} />
               )}
             </div>
-            {(canSynthesize || synthesis) && (
+            {showSynthesis && (canSynthesize || synthesis) && (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-semibold text-slate-700">Synthesis</div>
@@ -366,9 +386,9 @@ const PIE_COLORS = ['#1d4ed8', '#0f766e', '#c2410c', '#7c3aed', '#0f172a', '#14b
 type ShortItem = { id: string, text: string }
 type Box = { id: string, text: string, x: number, y: number, width: number, height: number }
 
-function ShortTextCanvas({ items, height }: { items: ShortItem[], height: number }) {
+function ShortTextCanvas({ items, height }: { items: ShortItem[], height?: number }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const [size, setSize] = useState({ width: 0, height })
+  const [size, setSize] = useState({ width: 0, height: 0 })
   const [positions, setPositions] = useState<Record<string, Box>>({})
 
   useEffect(() => {
@@ -411,7 +431,7 @@ function ShortTextCanvas({ items, height }: { items: ShortItem[], height: number
     <div
       ref={containerRef}
       className="relative w-full rounded-2xl border border-slate-700/60 bg-white"
-      style={{ height }}
+      style={{ height: height ?? '100%' }}
     >
       {items.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">

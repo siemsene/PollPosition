@@ -12,6 +12,14 @@
 
 * { -webkit-tap-highlight-color: transparent; }
 
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
 body {
   @apply bg-slate-950 text-slate-100;
   min-height: 100vh;
@@ -28,6 +36,18 @@ body {
     radial-gradient(circle at 18% 20%, rgba(56, 189, 248, 0.12), transparent 45%),
     radial-gradient(circle at 85% 0%, rgba(14, 116, 144, 0.08), transparent 45%),
     linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+}
+
+:root[data-embed="true"] body {
+  background: #ffffff;
+  color: #0f172a;
+  overflow: hidden;
+}
+
+:root[data-embed="true"] .card {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .card {

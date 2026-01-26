@@ -21,6 +21,7 @@ export default function PublicResultsGraph() {
   const nav = useNavigate()
   const [params] = useSearchParams()
   const roomCode = (params.get('room') ?? '').toUpperCase().trim()
+  const isEmbed = ['1', 'true', 'yes'].includes((params.get('embed') ?? '').toLowerCase())
   const [session, setSession] = useState<Session | null>(null)
   const [question, setQuestion] = useState<Question | null>(null)
   const [responses, setResponses] = useState<Resp[]>([])
@@ -29,6 +30,13 @@ export default function PublicResultsGraph() {
   useEffect(() => {
     if (!roomCode) nav('/', { replace: true })
   }, [roomCode, nav])
+
+  useEffect(() => {
+    if (!isEmbed) return
+    const root = document.documentElement
+    root.setAttribute('data-embed', 'true')
+    return () => root.removeAttribute('data-embed')
+  }, [isEmbed])
 
   useEffect(() => {
     ensureAnonymousAuth().catch(() => {})
@@ -100,8 +108,8 @@ export default function PublicResultsGraph() {
   }, [session, question])
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className={isEmbed ? 'h-screen w-screen' : 'min-h-screen'}>
+      <div className={isEmbed ? 'h-full w-full p-0' : 'mx-auto max-w-5xl px-4 py-8'}>
         {error && (
           <div className="card p-4 border border-red-500/30 bg-red-500/10">
             <div className="font-semibold text-red-200">Something went wrong</div>
@@ -122,6 +130,8 @@ export default function PublicResultsGraph() {
             variant="expanded"
             showHeader={false}
             frameless
+            fitHeight={isEmbed}
+            showSynthesis={!isEmbed}
             synthesisFromStore={question.synthesis ?? null}
             synthesizedCountFromStore={question.synthesizedCount ?? null}
           />
