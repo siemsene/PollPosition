@@ -167,12 +167,12 @@ export default function ResultsPanel({
   ].filter(Boolean).join(' ')
   const contentClass = fitHeight ? 'h-full' : 'mt-4'
   const chartBoxClass = fitHeight
-    ? 'h-full w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative'
+    ? 'h-full w-full bg-white p-3 relative'
     : (isExpanded
       ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative'
       : 'h-[320px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative')
   const wordCloudClass = fitHeight
-    ? 'h-full w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2'
+    ? 'h-full w-full bg-[#f3ead7] p-2'
     : (isExpanded
       ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2'
       : 'h-[360px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2')
@@ -291,6 +291,7 @@ export default function ResultsPanel({
             <ShortTextCanvas
               items={shortItems}
               height={fitHeight ? undefined : (isExpanded ? 520 : 360)}
+              frameless={fitHeight}
             />
             {showSynthesis && (canSynthesize || synthesis) && (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -386,7 +387,7 @@ const PIE_COLORS = ['#1d4ed8', '#0f766e', '#c2410c', '#7c3aed', '#0f172a', '#14b
 type ShortItem = { id: string, text: string }
 type Box = { id: string, text: string, x: number, y: number, width: number, height: number }
 
-function ShortTextCanvas({ items, height }: { items: ShortItem[], height?: number }) {
+function ShortTextCanvas({ items, height, frameless }: { items: ShortItem[], height?: number, frameless?: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [positions, setPositions] = useState<Record<string, Box>>({})
@@ -430,7 +431,7 @@ function ShortTextCanvas({ items, height }: { items: ShortItem[], height?: numbe
   return (
     <div
       ref={containerRef}
-      className="relative w-full rounded-2xl border border-slate-700/60 bg-white"
+      className={frameless ? 'relative w-full bg-white' : 'relative w-full rounded-2xl border border-slate-700/60 bg-white'}
       style={{ height: height ?? '100%' }}
     >
       {items.length === 0 && (
