@@ -1,9 +1,11 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { onDocumentUpdated, onDocumentWritten } = require('firebase-functions/v2/firestore')
+const { onMessagePublished } = require('firebase-functions/v2/pubsub')
 const { initializeApp } = require('firebase-admin/app')
 const { getAuth } = require('firebase-admin/auth')
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore')
+const { CloudBillingClient } = require('@google-cloud/billing')
 
 initializeApp()
 const db = getFirestore()
@@ -133,7 +135,7 @@ async function sendEmail({ to, subject, text, htmlTitle, htmlBody, preheader }) 
   }
 }
 
-exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSeconds: 60, enforceAppCheck: true }, async (request) => {
+exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSeconds: 60, enforceAppCheck: true, maxInstances: 10 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in required.')
   }
@@ -252,7 +254,7 @@ exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSecond
 })
 
 exports.notifyAdminOfNewInstructors = onSchedule(
-  { region: 'us-central1', schedule: 'every day 08:00' },
+  { region: 'us-central1', schedule: 'every day 08:00', maxInstances: 1 },
   async () => {
     const adminEmail = process.env.ADMIN_EMAIL
     const appUrl = process.env.APP_URL
@@ -292,7 +294,7 @@ exports.notifyAdminOfNewInstructors = onSchedule(
 )
 
 exports.notifyInstructorApproved = onDocumentUpdated(
-  { region: 'us-central1', document: 'instructors/{instructorId}' },
+  { region: 'us-central1', document: 'instructors/{instructorId}', maxInstances: 5 },
   async (event) => {
     const before = event.data?.before?.data() || {}
     const after = event.data?.after?.data() || {}
@@ -318,7 +320,7 @@ exports.notifyInstructorApproved = onDocumentUpdated(
 )
 
 exports.cleanupOldSessions = onSchedule(
-  { region: 'us-central1', schedule: 'every day 03:00' },
+  { region: 'us-central1', schedule: 'every day 03:00', maxInstances: 1 },
   async () => {
     const cutoff = Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000)
     const snap = await db.collection('sessions')
@@ -336,7 +338,7 @@ exports.cleanupOldSessions = onSchedule(
 )
 
 exports.cleanupIdleAnonymousUsers = onSchedule(
-  { region: 'us-central1', schedule: 'every day 04:00' },
+  { region: 'us-central1', schedule: 'every day 04:00', maxInstances: 1 },
   async () => {
     const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000
     const adminAuth = getAuth()
@@ -376,7 +378,7 @@ function escapeHtml(value) {
 }
 
 exports.trackSessionWrites = onDocumentWritten(
-  { region: 'us-central1', document: 'sessions/{sessionId}' },
+  { region: 'us-central1', document: 'sessions/{sessionId}', maxInstances: 20 },
   async (event) => {
     const sessionId = event.params.sessionId
     const after = event.data?.after?.data() || {}
@@ -386,7 +388,7 @@ exports.trackSessionWrites = onDocumentWritten(
 )
 
 exports.trackQuestionWrites = onDocumentWritten(
-  { region: 'us-central1', document: 'sessions/{sessionId}/questions/{questionId}' },
+  { region: 'us-central1', document: 'sessions/{sessionId}/questions/{questionId}', maxInstances: 20 },
   async (event) => {
     const sessionId = event.params.sessionId
     const ownerUid = await resolveSessionOwner(sessionId)
@@ -395,10 +397,50 @@ exports.trackQuestionWrites = onDocumentWritten(
 )
 
 exports.trackResponseWrites = onDocumentWritten(
-  { region: 'us-central1', document: 'sessions/{sessionId}/questions/{questionId}/responses/{responseId}' },
+  { region: 'us-central1', document: 'sessions/{sessionId}/questions/{questionId}/responses/{responseId}', maxInstances: 50 },
   async (event) => {
     const sessionId = event.params.sessionId
     const ownerUid = await resolveSessionOwner(sessionId)
     await incrementCostsForSession({ sessionId, ownerUid, firestoreWrites: 1 })
+  },
+)
+
+const billing = new CloudBillingClient()
+
+exports.disableBillingOnBudgetExceeded = onMessagePublished(
+  { region: 'us-central1', topic: 'billing-kill-switch', maxInstances: 1 },
+  async (event) => {
+    const payload = event.data?.message?.json
+    if (!payload) {
+      console.warn('Kill switch: empty payload, ignoring.')
+      return
+    }
+
+    const costAmount = Number(payload.costAmount ?? 0)
+    const budgetAmount = Number(payload.budgetAmount ?? 0)
+    if (!(costAmount >= budgetAmount) || budgetAmount <= 0) {
+      console.log(`Kill switch: cost ${costAmount} below budget ${budgetAmount}, no action.`)
+      return
+    }
+
+    const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT
+    if (!projectId) {
+      console.error('Kill switch: project id not resolvable from env.')
+      return
+    }
+    const projectName = `projects/${projectId}`
+
+    const [info] = await billing.getProjectBillingInfo({ name: projectName })
+    if (!info.billingEnabled) {
+      console.log('Kill switch: billing already disabled, nothing to do.')
+      return
+    }
+
+    console.warn(`KILL SWITCH FIRED: cost=${costAmount} >= budget=${budgetAmount}. Disabling billing on ${projectId}.`)
+    const [updated] = await billing.updateProjectBillingInfo({
+      name: projectName,
+      projectBillingInfo: { billingAccountName: '' },
+    })
+    console.warn('Kill switch: billing disabled.', updated)
   },
 )

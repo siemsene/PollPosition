@@ -49,6 +49,25 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/sessions/$(sessionId)).data.activeQuestionId == questionId;
     }
 
+    function isActiveOpenSession(sessionId, questionId) {
+      let session = get(/databases/$(database)/documents/sessions/$(sessionId)).data;
+      return session.activeQuestionId == questionId
+        && session.isOpen == true;
+    }
+
+    function isValidResponseValue(value) {
+      return (value is string && value.size() <= 5000)
+        || (value is int)
+        || (value is float)
+        || (value is map && value.size() <= 20);
+    }
+
+    function isValidResponseWrite() {
+      return request.resource.data.keys().hasOnly(['value', 'userId', 'submittedAt'])
+        && request.resource.data.keys().hasAll(['value', 'userId', 'submittedAt'])
+        && isValidResponseValue(request.resource.data.value);
+    }
+
     // Sessions
     match /sessions/{sessionId} {
       // Allow any signed-in user (including anonymous) to read sessions for live results links.
@@ -76,16 +95,21 @@ service cloud.firestore {
             || (isApprovedInstructor() && sessionOwnerUid(sessionId) == request.auth.uid)
             || isActiveQuestionPublic(sessionId, questionId);
           // Students can create/update only their own response doc (docId == uid),
-          // with a 1-minute cooldown between submissions.
+          // only while the question is active in an open session, with whitelisted
+          // fields, capped value size, and a 1-minute cooldown between submissions.
           allow create: if request.auth != null
             && request.auth.uid == responseId
             && request.resource.data.userId == request.auth.uid
-            && request.resource.data.submittedAt == request.time;
+            && request.resource.data.submittedAt == request.time
+            && isValidResponseWrite()
+            && isActiveOpenSession(sessionId, questionId);
           allow update: if request.auth != null
             && request.auth.uid == responseId
             && request.resource.data.userId == request.auth.uid
             && request.resource.data.submittedAt == request.time
-            && request.time > resource.data.submittedAt + duration.value(1, 'm');
+            && request.time > resource.data.submittedAt + duration.value(1, 'm')
+            && isValidResponseWrite()
+            && isActiveOpenSession(sessionId, questionId);
           allow delete: if false;
         }
       }
