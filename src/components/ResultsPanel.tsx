@@ -124,7 +124,19 @@ export default function ResultsPanel({
     }
   }, [synthesisFromStore, synthesizedCountFromStore])
 
-  const chartMarginTop = question ? 48 : 8
+  const chartMarginTop = question ? (isExpanded ? 88 : 48) : 8
+  const axisFontSize = isExpanded ? 18 : 12
+  const valueLabelFontSize = isExpanded ? 22 : 12
+  const pieLabelFontSize = isExpanded ? 20 : 12
+  const legendFontSize = isExpanded ? 18 : 12
+  const tooltipFontSize = isExpanded ? 14 : 12
+  const titleClass = isExpanded
+    ? 'absolute left-3 right-3 top-3 text-3xl font-bold tracking-tight text-slate-700 pointer-events-none text-center'
+    : 'absolute left-3 right-3 top-2 text-lg font-semibold text-slate-700 pointer-events-none text-center'
+  const subtitleClass = isExpanded
+    ? 'absolute left-3 right-3 top-14 text-base text-slate-500 pointer-events-none text-center'
+    : 'absolute left-3 right-3 top-8 text-xs text-slate-500 pointer-events-none text-center'
+  const mcqTruncateLimit = isExpanded ? 22 : 14
   const canSynthesize = allowSynthesis && (type === 'short' || type === 'long')
   const synthesisItemCount = type === 'long' ? longItems.length : shortItems.length
   const isSynthesisStale = synthesis && synthesizedForCount !== null && synthesizedForCount !== synthesisItemCount
@@ -217,10 +229,10 @@ export default function ResultsPanel({
           <div className={chartBoxClass}>
             {question && (
               <>
-                <div className="absolute left-3 right-3 top-2 text-lg font-semibold text-slate-700 pointer-events-none text-center">
+                <div className={titleClass}>
                   {question}
                 </div>
-                <div className="absolute left-3 right-3 top-8 text-xs text-slate-500 pointer-events-none text-center">
+                <div className={subtitleClass}>
                   {responses.length} response(s)
                 </div>
               </>
@@ -228,31 +240,32 @@ export default function ResultsPanel({
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={type === 'mcq' ? mcqData : numData.hist.bins}
-                margin={{ left: 8, right: 8, top: chartMarginTop, bottom: type === 'mcq' ? 24 : 8 }}
+                margin={{ left: 8, right: 8, top: chartMarginTop, bottom: type === 'mcq' ? (isExpanded ? 32 : 24) : 8 }}
                 barCategoryGap="20%"
                 barGap={2}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: CHART_AXIS, fontSize: 12 }}
+                  tick={{ fill: CHART_AXIS, fontSize: axisFontSize, fontWeight: isExpanded ? 600 : 400 }}
                   interval={0}
                   axisLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
                   tickLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
                   padding={{ left: 8, right: 8 }}
-                  height={type === 'mcq' ? 48 : 32}
-                  tickFormatter={type === 'mcq' ? truncateLabel : undefined}
+                  height={type === 'mcq' ? (isExpanded ? 64 : 48) : (isExpanded ? 44 : 32)}
+                  tickFormatter={type === 'mcq' ? (v: string) => truncateLabel(v, mcqTruncateLimit) : undefined}
                 />
                 <YAxis
-                  tick={{ fill: CHART_AXIS, fontSize: 12 }}
+                  tick={{ fill: CHART_AXIS, fontSize: axisFontSize, fontWeight: isExpanded ? 600 : 400 }}
                   allowDecimals={false}
                   axisLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
                   tickLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
                   padding={{ top: 0, bottom: 8 }}
+                  width={isExpanded ? 56 : 40}
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(37, 99, 235, 0.08)' }}
-                  contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
+                  contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: tooltipFontSize }}
                 />
                 <Bar
                   dataKey="count"
@@ -265,8 +278,8 @@ export default function ResultsPanel({
                     dataKey="count"
                     position="top"
                     fill={CHART_LABEL}
-                    fontSize={12}
-                    fontWeight={600}
+                    fontSize={valueLabelFontSize}
+                    fontWeight={isExpanded ? 700 : 600}
                     formatter={(value: number) => (value > 0 ? value : '')}
                   />
                 </Bar>
@@ -279,21 +292,21 @@ export default function ResultsPanel({
           <div className={chartBoxClass}>
             {question && (
               <>
-                <div className="absolute left-3 right-3 top-2 text-lg font-semibold text-slate-700 pointer-events-none text-center">
+                <div className={titleClass}>
                   {question}
                 </div>
-                <div className="absolute left-3 right-3 top-8 text-xs text-slate-500 pointer-events-none text-center">
+                <div className={subtitleClass}>
                   {responses.length} response(s)
                 </div>
               </>
             )}
             {pieData.every((d) => d.value === 0) ? (
-              <div className="h-full flex items-center justify-center text-sm text-slate-500">
+              <div className={`h-full flex items-center justify-center text-slate-500 ${isExpanded ? 'text-xl' : 'text-sm'}`}>
                 No allocations yet.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
+                <PieChart margin={{ top: chartMarginTop, right: 8, left: 8, bottom: 8 }}>
                   <Pie
                     data={pieData}
                     dataKey="value"
@@ -303,7 +316,7 @@ export default function ResultsPanel({
                     paddingAngle={2}
                     isAnimationActive
                     animationDuration={450}
-                    label={renderPieLabel}
+                    label={(props: any) => renderPieLabel(props, pieLabelFontSize)}
                     labelLine={false}
                   >
                     {pieData.map((entry, idx) => (
@@ -321,13 +334,13 @@ export default function ResultsPanel({
                       const pct = total > 0 ? Math.round((Number(value) / total) * 100) : 0
                       return [`${value} pts (${pct}%)`, name]
                     }}
-                    contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
+                    contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: tooltipFontSize }}
                   />
                   <Legend
                     verticalAlign="bottom"
-                    height={28}
+                    height={isExpanded ? 40 : 28}
                     iconType="circle"
-                    wrapperStyle={{ fontSize: 12, color: CHART_AXIS, paddingTop: 4 }}
+                    wrapperStyle={{ fontSize: legendFontSize, color: CHART_AXIS, paddingTop: 4, fontWeight: isExpanded ? 600 : 400 }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -341,6 +354,7 @@ export default function ResultsPanel({
               items={shortItems}
               height={fitHeight ? undefined : (isExpanded ? 520 : 360)}
               frameless={fitHeight}
+              large={isExpanded}
             />
             {showSynthesis && (canSynthesize || synthesis) && (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -388,9 +402,9 @@ export default function ResultsPanel({
           <div className="space-y-4">
             <div className={wordCloudClass}>
               {words.length === 0 ? (
-                <div className="text-slate-600 text-sm p-3">No answers yet.</div>
+                <div className={`text-slate-600 p-3 ${isExpanded ? 'text-xl' : 'text-sm'}`}>No answers yet.</div>
               ) : (
-                <WordCloudCanvas words={words} />
+                <WordCloudCanvas words={words} large={isExpanded} />
               )}
             </div>
             {showSynthesis && (canSynthesize || synthesis) && (
@@ -431,12 +445,12 @@ function round2(x: number) {
   return (Math.abs(r - Math.round(r)) < 1e-9) ? `${Math.round(r)}` : `${r}`
 }
 
-function truncateLabel(value: string) {
+function truncateLabel(value: string, limit = 14) {
   if (typeof value !== 'string') return value
-  return value.length > 14 ? `${value.slice(0, 13)}…` : value
+  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value
 }
 
-function renderPieLabel(props: any) {
+function renderPieLabel(props: any, fontSize = 12) {
   const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props
   if (!percent || percent < 0.06) return null
   const RADIAN = Math.PI / 180
@@ -450,8 +464,8 @@ function renderPieLabel(props: any) {
       fill="#ffffff"
       textAnchor="middle"
       dominantBaseline="central"
-      fontSize={12}
-      fontWeight={600}
+      fontSize={fontSize}
+      fontWeight={700}
     >
       {`${Math.round(percent * 100)}%`}
     </text>
@@ -467,7 +481,7 @@ const PIE_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b
 type ShortItem = { id: string, text: string }
 type Box = { id: string, text: string, x: number, y: number, width: number, height: number }
 
-function ShortTextCanvas({ items, height, frameless }: { items: ShortItem[], height?: number, frameless?: boolean }) {
+function ShortTextCanvas({ items, height, frameless, large }: { items: ShortItem[], height?: number, frameless?: boolean, large?: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [positions, setPositions] = useState<Record<string, Box>>({})
@@ -499,14 +513,18 @@ function ShortTextCanvas({ items, height, frameless }: { items: ShortItem[], hei
       for (const item of sorted) {
         const existing = prev[item.id]
         const base = existing && isBoxInBounds(existing, size) ? existing : null
-        const box = base ? { ...base, text: item.text } : placeBox(item, size, placed)
+        const box = base ? { ...base, text: item.text } : placeBox(item, size, placed, !!large)
         next[item.id] = box
         placed.push(box)
       }
 
       return next
     })
-  }, [items, size.width, size.height])
+  }, [items, size.width, size.height, large])
+
+  const cardClass = large
+    ? 'absolute rounded-xl border border-dashed border-slate-400 bg-slate-50 px-4 py-3 text-xl font-medium text-slate-800 shadow-sm short-pop'
+    : 'absolute rounded-lg border border-dashed border-slate-400 bg-slate-50 px-3 py-2 text-sm text-slate-700 shadow-sm short-pop'
 
   return (
     <div
@@ -515,7 +533,7 @@ function ShortTextCanvas({ items, height, frameless }: { items: ShortItem[], hei
       style={{ height: height ?? '100%' }}
     >
       {items.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">
+        <div className={`absolute inset-0 flex items-center justify-center text-slate-500 ${large ? 'text-xl' : 'text-sm'}`}>
           No answers yet.
         </div>
       )}
@@ -525,7 +543,7 @@ function ShortTextCanvas({ items, height, frameless }: { items: ShortItem[], hei
         return (
           <div
             key={item.id}
-            className="absolute rounded-lg border border-dashed border-slate-400 bg-slate-50 px-3 py-2 text-sm text-slate-700 shadow-sm short-pop"
+            className={cardClass}
             style={{
               left: box.x,
               top: box.y,
@@ -541,8 +559,8 @@ function ShortTextCanvas({ items, height, frameless }: { items: ShortItem[], hei
   )
 }
 
-function placeBox(item: ShortItem, size: { width: number, height: number }, placed: Box[]) {
-  const est = estimateBox(item.text)
+function placeBox(item: ShortItem, size: { width: number, height: number }, placed: Box[], large: boolean) {
+  const est = estimateBox(item.text, large)
   const maxX = Math.max(0, size.width - est.width)
   const maxY = Math.max(0, size.height - est.height)
   const padding = 8
@@ -564,7 +582,12 @@ function placeBox(item: ShortItem, size: { width: number, height: number }, plac
   }
 }
 
-function estimateBox(text: string) {
+function estimateBox(text: string, large: boolean) {
+  if (large) {
+    const width = Math.min(520, Math.max(180, text.length * 12 + 40))
+    const height = Math.max(60, Math.ceil(text.length / 28) * 32 + 28)
+    return { width, height }
+  }
   const width = Math.min(320, Math.max(120, text.length * 7 + 24))
   const height = Math.max(36, Math.ceil(text.length / 32) * 20 + 16)
   return { width, height }

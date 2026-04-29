@@ -1,6 +1,7 @@
 import { QRCodeCanvas } from 'qrcode.react'
 import { Copy } from 'lucide-react'
 import { useMemo } from 'react'
+import { copyText } from '../lib/clipboard'
 
 export default function QRCodeCard({ roomCode }: { roomCode: string }) {
   const url = useMemo(() => {
@@ -26,9 +27,7 @@ export default function QRCodeCard({ roomCode }: { roomCode: string }) {
             <button
               type="button"
               className="btn-ghost"
-              onClick={async () => {
-                await navigator.clipboard.writeText(url)
-              }}
+              onClick={() => { void copyText(url) }}
               title="Copy link"
             >
               <Copy size={16} />

@@ -30,7 +30,7 @@ export default function PublicResultsGraph() {
   }, [session, question])
 
   return (
-    <div className={isEmbed ? 'h-screen w-screen' : 'min-h-screen'}>
+    <div className={isEmbed ? 'h-screen w-screen h-dvh w-dvw' : 'min-h-screen min-h-dvh'}>
       <div className={isEmbed ? 'h-full w-full p-0' : 'mx-auto max-w-5xl px-4 py-8'}>
         {error && (
           <div className="card p-4 border border-red-500/30 bg-red-500/10">

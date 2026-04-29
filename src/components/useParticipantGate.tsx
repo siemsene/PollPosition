@@ -4,11 +4,28 @@ import { auth } from '../firebase'
 
 const ACK_KEY = 'pollposition.participantAcknowledged'
 
+function readAck(): boolean {
+  try {
+    return sessionStorage.getItem(ACK_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function writeAck(value: boolean) {
+  try {
+    if (value) sessionStorage.setItem(ACK_KEY, 'true')
+    else sessionStorage.removeItem(ACK_KEY)
+  } catch {
+    // sessionStorage may be unavailable (Safari private mode, disabled cookies)
+  }
+}
+
 export function useParticipantGate(): ReactNode {
   const initialUser = auth.currentUser
   const [user, setUser] = useState<User | null>(initialUser)
   const [authReady, setAuthReady] = useState(initialUser !== null)
-  const [acknowledged, setAcknowledged] = useState(() => sessionStorage.getItem(ACK_KEY) === 'true')
+  const [acknowledged, setAcknowledged] = useState(readAck)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -16,7 +33,7 @@ export function useParticipantGate(): ReactNode {
       setUser(u)
       setAuthReady(true)
       if (!u || u.isAnonymous) {
-        sessionStorage.removeItem(ACK_KEY)
+        writeAck(false)
         setAcknowledged(false)
       }
     })
@@ -34,7 +51,7 @@ export function useParticipantGate(): ReactNode {
   if (!user || user.isAnonymous || acknowledged) return null
 
   async function continueAsCurrentUser() {
-    sessionStorage.setItem(ACK_KEY, 'true')
+    writeAck(true)
     setAcknowledged(true)
   }
 
@@ -43,7 +60,7 @@ export function useParticipantGate(): ReactNode {
     try {
       await signOut(auth)
       await signInAnonymously(auth)
-      sessionStorage.removeItem(ACK_KEY)
+      writeAck(false)
     } finally {
       setBusy(false)
     }

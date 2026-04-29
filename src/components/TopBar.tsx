@@ -10,7 +10,12 @@ export default function TopBar({ mode }: { mode: 'student' | 'instructor' | 'adm
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
   useEffect(() => {
-    const stored = window.localStorage.getItem('pp-theme')
+    let stored: string | null = null
+    try {
+      stored = window.localStorage.getItem('pp-theme')
+    } catch {
+      // storage may be unavailable (Safari private mode, disabled cookies)
+    }
     const next = stored === 'light' ? 'light' : 'dark'
     setTheme(next)
     document.documentElement.dataset.theme = next
@@ -20,7 +25,11 @@ export default function TopBar({ mode }: { mode: 'student' | 'instructor' | 'adm
     const next = theme === 'dark' ? 'light' : 'dark'
     setTheme(next)
     document.documentElement.dataset.theme = next
-    window.localStorage.setItem('pp-theme', next)
+    try {
+      window.localStorage.setItem('pp-theme', next)
+    } catch {
+      // storage write may fail in Safari private mode; theme still applies for the session
+    }
   }
   return (
     <div className="topbar sticky top-0 z-10 bg-slate-950/70 backdrop-blur border-b border-slate-800">

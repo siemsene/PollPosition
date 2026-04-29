@@ -1,5 +1,6 @@
 import { Copy, ExternalLink, HelpCircle } from 'lucide-react'
 import { useMemo } from 'react'
+import { copyText } from '../lib/clipboard'
 
 export default function PublicResultsCard({ roomCode }: { roomCode: string }) {
   const url = useMemo(() => {
@@ -44,9 +45,7 @@ export default function PublicResultsCard({ roomCode }: { roomCode: string }) {
             <button
               type="button"
               className="btn-ghost"
-              onClick={async () => {
-                await navigator.clipboard.writeText(url)
-              }}
+              onClick={() => { void copyText(url) }}
               title="Copy link"
             >
               <Copy size={16} />
@@ -68,9 +67,7 @@ export default function PublicResultsCard({ roomCode }: { roomCode: string }) {
             <button
               type="button"
               className="btn-ghost"
-              onClick={async () => {
-                await navigator.clipboard.writeText(graphUrl)
-              }}
+              onClick={() => { void copyText(graphUrl) }}
               title="Copy graph link"
             >
               <Copy size={16} />

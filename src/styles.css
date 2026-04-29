@@ -23,6 +23,7 @@ body {
 body {
   @apply bg-slate-950 text-slate-100;
   min-height: 100vh;
+  min-height: 100dvh;
   background-image:
     radial-gradient(circle at 18% 20%, rgba(56, 189, 248, 0.18), transparent 40%),
     radial-gradient(circle at 85% 0%, rgba(244, 114, 182, 0.12), transparent 45%),

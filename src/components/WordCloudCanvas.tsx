@@ -16,7 +16,7 @@ type WordCloudOptions = {
   drawOutOfBound: boolean
 }
 
-export default function WordCloudCanvas({ words }: { words: Word[] }) {
+export default function WordCloudCanvas({ words, large = false }: { words: Word[], large?: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
@@ -39,10 +39,14 @@ export default function WordCloudCanvas({ words }: { words: Word[] }) {
       if (canvas.width !== width) canvas.width = width
       if (canvas.height !== height) canvas.height = height
 
+      const minFont = large ? 20 : 12
+      const maxFont = large ? 110 : 64
+      const scale = large ? 1.6 : 1
+
       const options: WordCloudOptions = {
         list,
-        weightFactor: (size) => Math.max(12, Math.min(64, size)),
-        gridSize: Math.max(8, Math.floor(width / 50)),
+        weightFactor: (size) => Math.max(minFont, Math.min(maxFont, size * scale)),
+        gridSize: Math.max(8, Math.floor(width / (large ? 36 : 50))),
         fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif',
         color: () => '#2563eb',
         backgroundColor: 'transparent',
@@ -60,7 +64,7 @@ export default function WordCloudCanvas({ words }: { words: Word[] }) {
     render()
 
     return () => observer.disconnect()
-  }, [list])
+  }, [list, large])
 
   return (
     <div ref={containerRef} className="h-full w-full">
