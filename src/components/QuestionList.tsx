@@ -1,18 +1,11 @@
 import { collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import type { QuestionType } from './QuestionEditor'
-import type { SynthesisResult } from '../lib/synthesis'
+import type { Question, QuestionType } from '../types/poll'
 import { BarChart3, Download, Hash, MessageCircle, MessageSquareText, PieChart, Play, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import ConfirmDialog from './ConfirmDialog'
 
-export type Question = {
-  id: string
-  type: QuestionType
-  prompt: string
-  options?: string[]
-  synthesis?: SynthesisResult | null
-  synthesizedCount?: number | null
-}
+export type { Question }
 
 export default function QuestionList({
   sessionId,
@@ -26,6 +19,7 @@ export default function QuestionList({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [downloadId, setDownloadId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<Question | null>(null)
 
   async function setActive(id: string) {
     setError(null)
@@ -36,10 +30,9 @@ export default function QuestionList({
     })
   }
 
-  async function removeQuestion(q: Question) {
-    if (busyId) return
-    const confirmed = window.confirm('Delete this question? Responses are kept in Firestore, but it will no longer appear in the list.')
-    if (!confirmed) return
+  async function confirmRemoveQuestion() {
+    const q = pendingDelete
+    if (!q || busyId) return
     setError(null)
     setBusyId(q.id)
     try {
@@ -50,6 +43,7 @@ export default function QuestionList({
           updatedAt: serverTimestamp(),
         })
       }
+      setPendingDelete(null)
     } catch (e: any) {
       setError(e?.message ?? 'Failed to delete question.')
     } finally {
@@ -138,7 +132,7 @@ export default function QuestionList({
                 <button
                   type="button"
                   className="btn-ghost"
-                  onClick={() => removeQuestion(q)}
+                  onClick={() => setPendingDelete(q)}
                   disabled={busyId === q.id}
                   title="Delete question"
                 >
@@ -149,6 +143,16 @@ export default function QuestionList({
           ))
         )}
       </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete this question?"
+        description="Responses are kept in Firestore, but the question will no longer appear in the list."
+        confirmLabel="Delete"
+        destructive
+        busy={busyId !== null}
+        onConfirm={confirmRemoveQuestion}
+        onCancel={() => { if (!busyId) setPendingDelete(null) }}
+      />
     </div>
   )
 }

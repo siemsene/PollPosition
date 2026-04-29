@@ -5,14 +5,31 @@ import { auth } from '../firebase'
 const ACK_KEY = 'pollposition.participantAcknowledged'
 
 export function useParticipantGate(): ReactNode {
-  const [user, setUser] = useState<User | null | undefined>(() => auth.currentUser)
+  const initialUser = auth.currentUser
+  const [user, setUser] = useState<User | null>(initialUser)
+  const [authReady, setAuthReady] = useState(initialUser !== null)
   const [acknowledged, setAcknowledged] = useState(() => sessionStorage.getItem(ACK_KEY) === 'true')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => setUser(u))
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u)
+      setAuthReady(true)
+      if (!u || u.isAnonymous) {
+        sessionStorage.removeItem(ACK_KEY)
+        setAcknowledged(false)
+      }
+    })
     return () => unsub()
   }, [])
+
+  if (!authReady) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-10">
+        <div className="card p-6 text-sm text-slate-400">Checking sign-in state...</div>
+      </div>
+    )
+  }
 
   if (!user || user.isAnonymous || acknowledged) return null
 

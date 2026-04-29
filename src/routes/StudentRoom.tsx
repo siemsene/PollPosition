@@ -2,20 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import TopBar from '../components/TopBar'
 import { useParticipantGate } from '../components/useParticipantGate'
-import { auth, db, ensureAnonymousAuth } from '../firebase'
-import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore'
-import type { QuestionType } from '../components/QuestionEditor'
+import { auth, db } from '../firebase'
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { useRoomSession } from '../lib/useRoomSession'
+import { questionTypeLabel } from '../lib/format'
 import { CheckCircle2 } from 'lucide-react'
-
-type Session = { id: string, roomCode: string, activeQuestionId: string | null, isOpen?: boolean }
-type Question = { id: string, type: QuestionType, prompt: string, options?: string[] }
 
 export default function StudentRoom() {
   const nav = useNavigate()
   const [params] = useSearchParams()
   const roomCode = (params.get('room') ?? '').toUpperCase().trim()
-  const [session, setSession] = useState<Session | null>(null)
-  const [question, setQuestion] = useState<Question | null>(null)
+  const { session, question, error: roomError } = useRoomSession(roomCode)
   const [answer, setAnswer] = useState<string>('')
   const [allocations, setAllocations] = useState<Record<string, string>>({})
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle')
@@ -26,45 +23,9 @@ export default function StudentRoom() {
     if (!roomCode) nav('/', { replace: true })
   }, [roomCode, nav])
 
-  // Resolve roomCode -> session doc by query
   useEffect(() => {
-    let unsub: any = null
-    ;(async () => {
-      await ensureAnonymousAuth()
-      const qRef = query(collection(db, 'sessions'), where('roomCode', '==', roomCode), limit(1))
-      const snap = await getDocs(qRef)
-      if (snap.empty) {
-        setError(`Room "${roomCode}" not found.`)
-        setSession(null)
-        return
-      }
-      const docSnap = snap.docs[0]
-      const sessionId = docSnap.id
-
-      unsub = onSnapshot(doc(db, 'sessions', sessionId), (s) => {
-        const data = s.data() as any
-        setSession({ id: s.id, roomCode: data.roomCode, activeQuestionId: data.activeQuestionId ?? null, isOpen: data.isOpen ?? true })
-      })
-    })().catch((e) => {
-      setError(e?.message ?? 'Failed to join room.')
-    })
-
-    return () => { if (unsub) unsub() }
-  }, [roomCode])
-
-  // Subscribe active question
-  useEffect(() => {
-    if (!session?.id || !session.activeQuestionId) {
-      setQuestion(null)
-      return
-    }
-    const unsub = onSnapshot(doc(db, 'sessions', session.id, 'questions', session.activeQuestionId), (d) => {
-      if (!d.exists()) { setQuestion(null); return }
-      const data = d.data() as any
-      setQuestion({ id: d.id, type: data.type, prompt: data.prompt, options: data.options ?? [] })
-    })
-    return () => unsub()
-  }, [session?.id, session?.activeQuestionId])
+    if (roomError) setError(roomError)
+  }, [roomError])
 
   // Reset answer when question changes
   useEffect(() => {
@@ -100,7 +61,7 @@ export default function StudentRoom() {
       if (question.type === 'pie') {
         const roundedTotal = Math.round(allocationTotal * 100) / 100
         if (Math.abs(roundedTotal - 100) > 0.001) {
-          window.alert('Please make sure your points add up to 100 before submitting.')
+          setError('Please make sure your points add up to 100 before submitting.')
           return
         }
       }
@@ -266,7 +227,7 @@ export default function StudentRoom() {
           ) : (
             <>
               <div className="mt-6">
-                <div className="text-xs uppercase tracking-wide text-slate-400">{label(question.type)}</div>
+                <div className="text-xs uppercase tracking-wide text-slate-400">{questionTypeLabel(question.type)}</div>
                 <div className="text-2xl font-semibold mt-1">{question.prompt}</div>
               </div>
 
@@ -295,10 +256,3 @@ export default function StudentRoom() {
   )
 }
 
-function label(t: string) {
-  if (t === 'mcq') return 'Multiple choice'
-  if (t === 'pie') return '100 point allocation'
-  if (t === 'number') return 'Numerical'
-  if (t === 'short') return 'Short text'
-  return 'Extended text'
-}

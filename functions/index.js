@@ -2,6 +2,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { onDocumentUpdated, onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { initializeApp } = require('firebase-admin/app')
+const { getAuth } = require('firebase-admin/auth')
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore')
 
 initializeApp()
@@ -331,6 +332,37 @@ exports.cleanupOldSessions = onSchedule(
       ])
     })
     await Promise.allSettled(deletions)
+  },
+)
+
+exports.cleanupIdleAnonymousUsers = onSchedule(
+  { region: 'us-central1', schedule: 'every day 04:00' },
+  async () => {
+    const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000
+    const adminAuth = getAuth()
+    let pageToken
+    let totalDeleted = 0
+    do {
+      const res = await adminAuth.listUsers(1000, pageToken)
+      const idleAnonUids = res.users
+        .filter((u) => u.providerData.length === 0)
+        .filter((u) => {
+          const lastSignIn = u.metadata && u.metadata.lastSignInTime
+            ? new Date(u.metadata.lastSignInTime).getTime()
+            : 0
+          return lastSignIn > 0 && lastSignIn < cutoffMs
+        })
+        .map((u) => u.uid)
+      for (let i = 0; i < idleAnonUids.length; i += 1000) {
+        const batch = idleAnonUids.slice(i, i + 1000)
+        const result = await adminAuth.deleteUsers(batch)
+        totalDeleted += result.successCount
+      }
+      pageToken = res.pageToken
+    } while (pageToken)
+    if (totalDeleted > 0) {
+      console.log(`Deleted ${totalDeleted} idle anonymous users.`)
+    }
   },
 )
 

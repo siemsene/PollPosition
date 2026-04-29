@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { Plus } from 'lucide-react'
+import type { QuestionType } from '../types/poll'
 
-export type QuestionType = 'mcq' | 'number' | 'short' | 'long' | 'pie'
+export type { QuestionType }
 
 export default function QuestionEditor({ sessionId }: { sessionId: string }) {
   const [type, setType] = useState<QuestionType>('mcq')

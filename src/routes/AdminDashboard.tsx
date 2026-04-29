@@ -5,6 +5,7 @@ import { auth, db } from '../firebase'
 import { sendPasswordResetEmail } from 'firebase/auth'
 import { collection, deleteField, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { UserCheck, UserMinus } from 'lucide-react'
+import { formatUsd } from '../lib/format'
 
 export default function AdminDashboard() {
   const nav = useNavigate()
@@ -260,12 +261,6 @@ export default function AdminDashboard() {
       </div>
     </div>
   )
-}
-
-function formatUsd(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return '$0.00'
-  if (value < 0.01) return `$${value.toFixed(4)}`
-  return `$${value.toFixed(2)}`
 }
 
 function formatTimestamp(value: any) {
