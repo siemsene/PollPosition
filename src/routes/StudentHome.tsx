@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import TopBar from '../components/TopBar'
+import { useParticipantGate } from '../components/useParticipantGate'
 import { ensureAnonymousAuth } from '../firebase'
 import { ArrowRight, QrCode } from 'lucide-react'
 
@@ -10,6 +11,7 @@ export default function StudentHome() {
   const roomFromUrl = params.get('room') ?? ''
   const [room, setRoom] = useState(roomFromUrl)
   const [busy, setBusy] = useState(false)
+  const gate = useParticipantGate()
 
   useEffect(() => {
     ensureAnonymousAuth().catch(() => {})
@@ -24,6 +26,15 @@ export default function StudentHome() {
     } finally {
       setBusy(false)
     }
+  }
+
+  if (gate) {
+    return (
+      <div>
+        <TopBar mode="student" />
+        {gate}
+      </div>
+    )
   }
 
   return (
@@ -52,7 +63,7 @@ export default function StudentHome() {
               />
             </div>
 
-            <button className="btn w-full" onClick={join} disabled={busy || room.trim().length < 4}>
+            <button type="button" className="btn w-full" onClick={join} disabled={busy || room.trim().length < 4}>
               <ArrowRight size={18} /> {busy ? 'Joining...' : 'Join'}
             </button>
 

@@ -98,7 +98,7 @@ export default function InstructorSignup() {
               <div className="text-sm text-emerald-100/80 mt-1">
                 You will receive an email after approval. You can sign in on the instructor page at any time.
               </div>
-              <button className="btn mt-4" onClick={() => nav('/admin')}>
+              <button type="button" className="btn mt-4" onClick={() => nav('/admin')}>
                 Go to sign in
               </button>
             </div>
@@ -135,6 +135,7 @@ export default function InstructorSignup() {
                     <input
                       className="input"
                       type="password"
+                      aria-label="Confirm password"
                       value={confirm}
                       onChange={(e) => setConfirm(e.target.value)}
                     />
@@ -175,10 +176,10 @@ export default function InstructorSignup() {
               {error && <div className="text-sm text-red-300">{error}</div>}
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <button className="btn" onClick={submitApplication} disabled={!canSubmit}>
+                <button type="button" className="btn" onClick={submitApplication} disabled={!canSubmit}>
                   {busy ? 'Submitting...' : 'Submit application'}
                 </button>
-                <button className="btn-ghost" onClick={() => nav('/admin')}>
+                <button type="button" className="btn-ghost" onClick={() => nav('/admin')}>
                   Back to sign in
                 </button>
               </div>

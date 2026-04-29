@@ -38,7 +38,7 @@ export default function TopBar({ mode }: { mode: 'student' | 'instructor' | 'adm
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="btn-ghost" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} view`}>
+          <button type="button" className="btn-ghost" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} view`}>
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />} {theme === 'dark' ? 'Light view' : 'Dark view'}
           </button>
           {mode === 'student' ? (
@@ -56,6 +56,7 @@ export default function TopBar({ mode }: { mode: 'student' | 'instructor' | 'adm
                 <Users size={18} /> Student view
               </Link>
               <button
+                type="button"
                 className="btn-ghost"
                 onClick={async () => {
                   await signOut(auth)

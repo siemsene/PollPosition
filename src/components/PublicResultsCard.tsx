@@ -42,6 +42,7 @@ export default function PublicResultsCard({ roomCode }: { roomCode: string }) {
           </div>
           <div className="mt-3 flex items-center gap-2">
             <button
+              type="button"
               className="btn-ghost"
               onClick={async () => {
                 await navigator.clipboard.writeText(url)
@@ -65,6 +66,7 @@ export default function PublicResultsCard({ roomCode }: { roomCode: string }) {
           </div>
           <div className="mt-3 flex items-center gap-2">
             <button
+              type="button"
               className="btn-ghost"
               onClick={async () => {
                 await navigator.clipboard.writeText(graphUrl)

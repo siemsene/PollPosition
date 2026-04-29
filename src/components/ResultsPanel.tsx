@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Maximize2 } from 'lucide-react'
 import { excludeOutliers, numericHistogram, safeParseNumber } from '../lib/hist'
 import { wordFrequencies } from '../lib/text'
@@ -195,6 +195,7 @@ export default function ResultsPanel({
             )}
             {canSynthesize && (
               <button
+                type="button"
                 className="btn-ghost"
                 onClick={handleSynthesize}
                 disabled={synthesizing || synthesisItemCount === 0}
@@ -204,7 +205,7 @@ export default function ResultsPanel({
               </button>
             )}
             {onExpand && (
-              <button className="btn-ghost" onClick={onExpand} title="Expand results">
+              <button type="button" className="btn-ghost" onClick={onExpand} title="Expand results">
                 <Maximize2 size={16} /> Expand
               </button>
             )}
@@ -227,22 +228,48 @@ export default function ResultsPanel({
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={type === 'mcq' ? mcqData : numData.hist.bins}
-                margin={{ left: 8, right: 8, top: chartMarginTop, bottom: 8 }}
-                  barCategoryGap={6}
-                  barGap={2}
-                >
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis dataKey="name" tick={{ fill: '#334155', fontSize: 12 }} interval={0} axisLine={{ stroke: '#1f2937', strokeWidth: 2 }} tickLine={{ stroke: '#1f2937', strokeWidth: 2 }} padding={{ left: 8 }} />
-                <YAxis tick={{ fill: '#334155', fontSize: 12 }} allowDecimals={false} axisLine={{ stroke: '#1f2937', strokeWidth: 2 }} tickLine={{ stroke: '#1f2937', strokeWidth: 2 }} padding={{ top: 0, bottom: 8 }} />
+                margin={{ left: 8, right: 8, top: chartMarginTop, bottom: type === 'mcq' ? 24 : 8 }}
+                barCategoryGap="20%"
+                barGap={2}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: CHART_AXIS, fontSize: 12 }}
+                  interval={0}
+                  axisLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
+                  tickLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
+                  padding={{ left: 8, right: 8 }}
+                  height={type === 'mcq' ? 48 : 32}
+                  tickFormatter={type === 'mcq' ? truncateLabel : undefined}
+                />
+                <YAxis
+                  tick={{ fill: CHART_AXIS, fontSize: 12 }}
+                  allowDecimals={false}
+                  axisLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
+                  tickLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
+                  padding={{ top: 0, bottom: 8 }}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(37, 99, 235, 0.08)' }}
+                  contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
+                />
                 <Bar
                   dataKey="count"
                   radius={[6, 6, 0, 0]}
-                  fill="#0f2a66"
-                  stroke="#d1d5db"
-                  strokeWidth={1}
+                  fill={CHART_PRIMARY}
                   isAnimationActive
                   animationDuration={450}
-                />
+                >
+                  <LabelList
+                    dataKey="count"
+                    position="top"
+                    fill={CHART_LABEL}
+                    fontSize={12}
+                    fontWeight={600}
+                    formatter={(value: number) => (value > 0 ? value : '')}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -271,15 +298,37 @@ export default function ResultsPanel({
                     data={pieData}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={isExpanded ? 90 : 70}
-                    outerRadius={isExpanded ? 170 : 120}
+                    innerRadius={isExpanded ? 80 : 60}
+                    outerRadius={isExpanded ? 150 : 105}
                     paddingAngle={2}
+                    isAnimationActive
+                    animationDuration={450}
+                    label={renderPieLabel}
+                    labelLine={false}
                   >
                     {pieData.map((entry, idx) => (
-                      <Cell key={`${entry.name}-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} stroke="#ffffff" strokeWidth={1} />
+                      <Cell
+                        key={`${entry.name}-${idx}`}
+                        fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                      />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: any) => [value, 'Points']} />
+                  <Tooltip
+                    formatter={(value: any, name: any) => {
+                      const total = pieData.reduce((sum, d) => sum + d.value, 0)
+                      const pct = total > 0 ? Math.round((Number(value) / total) * 100) : 0
+                      return [`${value} pts (${pct}%)`, name]
+                    }}
+                    contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={28}
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: 12, color: CHART_AXIS, paddingTop: 4 }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             )}
@@ -382,7 +431,38 @@ function round2(x: number) {
   return (Math.abs(r - Math.round(r)) < 1e-9) ? `${Math.round(r)}` : `${r}`
 }
 
-const PIE_COLORS = ['#1d4ed8', '#0f766e', '#c2410c', '#7c3aed', '#0f172a', '#14b8a6', '#f97316', '#6366f1']
+function truncateLabel(value: string) {
+  if (typeof value !== 'string') return value
+  return value.length > 14 ? `${value.slice(0, 13)}…` : value
+}
+
+function renderPieLabel(props: any) {
+  const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props
+  if (!percent || percent < 0.06) return null
+  const RADIAN = Math.PI / 180
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.55
+  const x = cx + radius * Math.cos(-midAngle * RADIAN)
+  const y = cy + radius * Math.sin(-midAngle * RADIAN)
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#ffffff"
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={12}
+      fontWeight={600}
+    >
+      {`${Math.round(percent * 100)}%`}
+    </text>
+  )
+}
+
+const CHART_PRIMARY = '#2563eb'
+const CHART_GRID = '#cbd5e1'
+const CHART_AXIS = '#475569'
+const CHART_LABEL = '#0f172a'
+const PIE_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#65a30d', '#ec4899']
 
 type ShortItem = { id: string, text: string }
 type Box = { id: string, text: string, x: number, y: number, width: number, height: number }

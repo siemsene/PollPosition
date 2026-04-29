@@ -195,8 +195,8 @@ export default function AdminDashboard() {
         </div>
         <div>
           <div className="flex flex-wrap gap-2">
-            <button className="btn-ghost" onClick={resetPassword}>Reset password</button>
-            <button className="btn-ghost" onClick={downloadInstructorCsv}>
+            <button type="button" className="btn-ghost" onClick={resetPassword}>Reset password</button>
+            <button type="button" className="btn-ghost" onClick={downloadInstructorCsv}>
               Download instructors CSV
             </button>
           </div>
@@ -235,12 +235,13 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex items-center gap-2">
                       {inst.status !== 'approved' && (
-                        <button className="btn-ghost" onClick={() => approveInstructor(inst.id)}>
+                        <button type="button" className="btn-ghost" onClick={() => approveInstructor(inst.id)}>
                           <UserCheck size={16} /> Approve
                         </button>
                       )}
                       {inst.status !== 'removed' && (
                         <button
+                          type="button"
                           className="btn-ghost"
                           onClick={() => removeInstructor(inst.id)}
                           disabled={isSelf}

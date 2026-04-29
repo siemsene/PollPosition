@@ -24,6 +24,7 @@ export default function QRCodeCard({ roomCode }: { roomCode: string }) {
               Room: <span className="text-white">{roomCode}</span>
             </span>
             <button
+              type="button"
               className="btn-ghost"
               onClick={async () => {
                 await navigator.clipboard.writeText(url)

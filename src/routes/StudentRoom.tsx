@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import TopBar from '../components/TopBar'
+import { useParticipantGate } from '../components/useParticipantGate'
 import { auth, db, ensureAnonymousAuth } from '../firebase'
 import { collection, doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore'
 import type { QuestionType } from '../components/QuestionEditor'
@@ -19,6 +20,7 @@ export default function StudentRoom() {
   const [allocations, setAllocations] = useState<Record<string, string>>({})
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const gate = useParticipantGate()
 
   useEffect(() => {
     if (!roomCode) nav('/', { replace: true })
@@ -136,6 +138,7 @@ export default function StudentRoom() {
             const selected = answer === opt
             return (
               <button
+                type="button"
                 key={opt}
                 className={`rounded-2xl border px-4 py-3 text-left transition ${
                   selected ? 'border-white/30 bg-white/10' : 'border-slate-800 bg-slate-950/30 hover:bg-slate-900/40'
@@ -189,6 +192,7 @@ export default function StudentRoom() {
                 min={0}
                 step={1}
                 inputMode="numeric"
+                aria-label={`Points for ${opt}`}
                 value={allocations[opt] ?? ''}
                 onChange={(e) => {
                   const next = { ...allocations, [opt]: e.target.value }
@@ -219,6 +223,15 @@ export default function StudentRoom() {
     )
   }, [question, answer, allocations, allocationTotal])
 
+  if (gate) {
+    return (
+      <div>
+        <TopBar mode="student" />
+        {gate}
+      </div>
+    )
+  }
+
   return (
     <div>
       <TopBar mode="student" />
@@ -238,7 +251,7 @@ export default function StudentRoom() {
               <div className="text-xs uppercase tracking-wide text-slate-400">Room</div>
               <div className="font-semibold tracking-widest">{roomCode}</div>
             </div>
-            <button className="btn-ghost" onClick={() => nav('/')}>Change room</button>
+            <button type="button" className="btn-ghost" onClick={() => nav('/')}>Change room</button>
           </div>
 
           {!session ? (
@@ -260,7 +273,7 @@ export default function StudentRoom() {
               {input}
 
               <div className="mt-4 flex items-center justify-between">
-                <button className="btn" onClick={submit} disabled={!canSubmit}>
+                <button type="button" className="btn" onClick={submit} disabled={!canSubmit}>
                   Submit
                 </button>
                 {status === 'sent' && (

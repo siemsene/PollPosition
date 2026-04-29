@@ -99,6 +99,7 @@ export default function AdminLogin() {
               <input
                 className="input"
                 type="password"
+                aria-label="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -107,15 +108,15 @@ export default function AdminLogin() {
             {error && <div className="text-sm text-red-300">{error}</div>}
             {resetInfo && <div className="text-sm text-emerald-300">{resetInfo}</div>}
 
-            <button className="btn w-full" onClick={login} disabled={busy || password.length === 0 || email.trim().length === 0}>
+            <button type="button" className="btn w-full" onClick={login} disabled={busy || password.length === 0 || email.trim().length === 0}>
               {busy ? 'Signing in...' : 'Sign in'}
             </button>
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-              <button className="underline" onClick={resetPassword}>Forgot password?</button>
+              <button type="button" className="underline" onClick={resetPassword}>Forgot password?</button>
               <span>·</span>
               <span>Need access?</span>
-              <button className="underline" onClick={() => nav('/instructor/signup')}>Apply to be an instructor</button>
+              <button type="button" className="underline" onClick={() => nav('/instructor/signup')}>Apply to be an instructor</button>
             </div>
           </div>
         </div>

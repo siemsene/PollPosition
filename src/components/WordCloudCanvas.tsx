@@ -44,7 +44,7 @@ export default function WordCloudCanvas({ words }: { words: Word[] }) {
         weightFactor: (size) => Math.max(12, Math.min(64, size)),
         gridSize: Math.max(8, Math.floor(width / 50)),
         fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif',
-        color: () => '#0f2a66',
+        color: () => '#2563eb',
         backgroundColor: 'transparent',
         rotateRatio: 0.3,
         rotationSteps: 2,

@@ -319,7 +319,7 @@ export default function InstructorDashboard() {
                   The first instructor to sign in can claim admin access. This enables you to approve other instructors.
                 </div>
               </div>
-              <button className="btn" onClick={claimAdminAccess} disabled={!canClaimAdmin}>
+              <button type="button" className="btn" onClick={claimAdminAccess} disabled={!canClaimAdmin}>
                 Claim admin
               </button>
             </div>
@@ -375,7 +375,7 @@ export default function InstructorDashboard() {
               <div className="text-sm text-amber-100/80 mt-1">
                 This account is configured as an admin. Use the admin dashboard to manage instructors.
               </div>
-              <button className="btn mt-3" onClick={() => nav('/admin/overview')}>
+              <button type="button" className="btn mt-3" onClick={() => nav('/admin/overview')}>
                 Go to admin dashboard
               </button>
             </div>
@@ -402,7 +402,7 @@ export default function InstructorDashboard() {
               <div className="text-sm text-slate-300 mt-1">
                 Submit an instructor application to request access.
               </div>
-              <button className="btn mt-3" onClick={() => nav('/instructor/signup')}>
+              <button type="button" className="btn mt-3" onClick={() => nav('/instructor/signup')}>
                 Apply to be an instructor
               </button>
             </div>
@@ -425,7 +425,7 @@ export default function InstructorDashboard() {
             <div className="text-xs text-amber-300/80 light-warning mt-1">Sessions are automatically removed 30 days after creation.</div>
           </div>
           <div className="flex items-center gap-2">
-            <button className="btn-ghost" onClick={requestPasswordReset}>
+            <button type="button" className="btn-ghost" onClick={requestPasswordReset}>
               Change password
             </button>
           </div>
@@ -461,7 +461,7 @@ export default function InstructorDashboard() {
                 onChange={(e) => setNewSessionTitle(e.target.value)}
                 placeholder="Session name"
               />
-              <button className="btn" onClick={createSession} disabled={creating || !canAccessDashboard}>
+              <button type="button" className="btn" onClick={createSession} disabled={creating || !canAccessDashboard}>
                 {creating ? 'Creating...' : 'New session'}
               </button>
             </div>
@@ -495,10 +495,11 @@ export default function InstructorDashboard() {
                         {isActive && <span className="text-xs text-slate-300">Current</span>}
                       </div>
                       <div className="mt-3 flex items-center gap-2">
-                        <button className="btn-ghost" onClick={() => selectSession(s.id)}>
+                        <button type="button" className="btn-ghost" onClick={() => selectSession(s.id)}>
                           Rejoin
                         </button>
                         <button
+                          type="button"
                           className="btn-ghost"
                           onClick={() => deleteSession(s.id)}
                           disabled={sessionBusyId === s.id}
@@ -577,7 +578,7 @@ export default function InstructorDashboard() {
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-5xl">
             <div className="flex justify-end mb-2">
-              <button className="btn-ghost" onClick={() => setShowExpandedResults(false)}>
+              <button type="button" className="btn-ghost" onClick={() => setShowExpandedResults(false)}>
                 <X size={18} /> Close
               </button>
             </div>

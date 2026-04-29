@@ -35,7 +35,7 @@ export default function QuestionEditor({ sessionId }: { sessionId: string }) {
     <div className="card p-4">
       <div className="flex items-center justify-between">
         <div className="font-semibold">Create a question</div>
-        <button className="btn" disabled={!canCreate} onClick={createQuestion}>
+        <button type="button" className="btn" disabled={!canCreate} onClick={createQuestion}>
           <Plus size={18} /> Add
         </button>
       </div>
@@ -43,7 +43,7 @@ export default function QuestionEditor({ sessionId }: { sessionId: string }) {
       <div className="mt-4 grid gap-3">
         <div>
           <div className="label mb-1">Answer type</div>
-          <select className="select" value={type} onChange={(e) => setType(e.target.value as QuestionType)}>
+          <select className="select" aria-label="Answer type" value={type} onChange={(e) => setType(e.target.value as QuestionType)}>
             <option value="mcq">Multiple choice</option>
             <option value="pie">100 point allocation</option>
             <option value="number">Numerical</option>
@@ -81,6 +81,7 @@ export default function QuestionEditor({ sessionId }: { sessionId: string }) {
               ))}
             </div>
             <button
+              type="button"
               className="btn-ghost mt-2"
               onClick={() => setOptions([...options, type === 'pie' ? `Category ${options.length + 1}` : `Option ${options.length + 1}`])}
             >

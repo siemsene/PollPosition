@@ -41,7 +41,7 @@ export function numericHistogram(values: number[]) {
   const bins = counts.map((count, i) => {
     const a = min + i * width
     const b = i === k - 1 ? max : (min + (i + 1) * width)
-    const name = `${roundNice(a)}-${roundNice(b)}`
+    const name = `${roundNice(a)}–${roundNice(b)}`
     return { name, count }
   })
 

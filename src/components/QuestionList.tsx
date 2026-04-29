@@ -103,6 +103,7 @@ export default function QuestionList({
               }`}
             >
               <button
+                type="button"
                 className="w-full text-left px-3 py-3"
                 onClick={() => setActive(q.id)}
                 title="Set as active question"
@@ -126,6 +127,7 @@ export default function QuestionList({
               </button>
               <div className="flex items-center justify-end gap-2 px-3 pb-3">
                 <button
+                  type="button"
                   className="btn-ghost"
                   onClick={() => downloadQuestion(q)}
                   disabled={downloadId === q.id}
@@ -134,6 +136,7 @@ export default function QuestionList({
                   <Download size={16} /> {downloadId === q.id ? 'Downloading...' : 'Download'}
                 </button>
                 <button
+                  type="button"
                   className="btn-ghost"
                   onClick={() => removeQuestion(q)}
                   disabled={busyId === q.id}
