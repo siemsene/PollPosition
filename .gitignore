@@ -32,3 +32,13 @@ yarn-error.log*
 node_modules
 dist/
 tsconfig.tsbuildinfo
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS metadata
+Thumbs.db
+.DS_Store

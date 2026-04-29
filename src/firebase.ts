@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app'
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 import { getAuth, onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
@@ -16,6 +17,20 @@ const firebaseConfig = {
 }
 
 export const app = initializeApp(firebaseConfig)
+
+if (import.meta.env.DEV) {
+  const debugToken = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN as string | undefined
+  ;(self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean | string }).FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken || true
+}
+
+const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined
+if (recaptchaSiteKey) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  })
+}
+
 export const db = getFirestore(app)
 export const auth = getAuth(app)
 export const functions = getFunctions(app, 'us-central1')

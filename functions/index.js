@@ -132,7 +132,7 @@ async function sendEmail({ to, subject, text, htmlTitle, htmlBody, preheader }) 
   }
 }
 
-exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSeconds: 60 }, async (request) => {
+exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSeconds: 60, enforceAppCheck: true }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in required.')
   }
