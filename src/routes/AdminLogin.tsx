@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth'
+import { signInWithEmailAndPassword } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import TopBar from '../components/TopBar'
@@ -11,7 +11,6 @@ export default function AdminLogin() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [resetInfo, setResetInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -34,7 +33,6 @@ export default function AdminLogin() {
 
   async function login() {
     setError(null)
-    setResetInfo(null)
     setBusy(true)
     try {
       if (auth.currentUser?.isAnonymous) {
@@ -48,22 +46,6 @@ export default function AdminLogin() {
       setError(e?.message ?? 'Login failed')
     } finally {
       setBusy(false)
-    }
-  }
-
-  async function resetPassword() {
-    const trimmed = email.trim()
-    if (!trimmed) {
-      setError('Enter your email above to receive a reset link.')
-      return
-    }
-    setError(null)
-    setResetInfo(null)
-    try {
-      await sendPasswordResetEmail(auth, trimmed)
-      setResetInfo('Password reset email sent. Check your inbox.')
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to send reset email.')
     }
   }
 
@@ -106,17 +88,30 @@ export default function AdminLogin() {
             </div>
 
             {error && <div className="text-sm text-red-300">{error}</div>}
-            {resetInfo && <div className="text-sm text-emerald-300">{resetInfo}</div>}
 
             <button type="button" className="btn w-full" onClick={login} disabled={busy || password.length === 0 || email.trim().length === 0}>
               {busy ? 'Signing in...' : 'Sign in'}
             </button>
 
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-              <button type="button" className="underline" onClick={resetPassword}>Forgot password?</button>
-              <span>·</span>
-              <span>Need access?</span>
-              <button type="button" className="underline" onClick={() => nav('/instructor/signup')}>Apply to be an instructor</button>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="text-sm text-cyan-300 hover:text-cyan-200 hover:underline"
+                onClick={() => nav('/forgot-password')}
+              >
+                Forgot your password?
+              </button>
+            </div>
+
+            <div className="border-t border-slate-700/60 pt-3 mt-2 text-sm text-slate-400">
+              Need access?{' '}
+              <button
+                type="button"
+                className="text-slate-200 hover:underline"
+                onClick={() => nav('/instructor/signup')}
+              >
+                Apply to be an instructor
+              </button>
             </div>
           </div>
         </div>

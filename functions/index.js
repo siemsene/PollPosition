@@ -1,6 +1,6 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { onSchedule } = require('firebase-functions/v2/scheduler')
-const { onDocumentUpdated, onDocumentWritten } = require('firebase-functions/v2/firestore')
+const { onDocumentCreated, onDocumentUpdated, onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { onMessagePublished } = require('firebase-functions/v2/pubsub')
 const { initializeApp } = require('firebase-admin/app')
 const { getAuth } = require('firebase-admin/auth')
@@ -253,40 +253,31 @@ exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSecond
   }
 })
 
-exports.notifyAdminOfNewInstructors = onSchedule(
-  { region: 'us-central1', schedule: 'every day 08:00', maxInstances: 1 },
-  async () => {
+exports.notifyAdminOfNewInstructor = onDocumentCreated(
+  { region: 'us-central1', document: 'instructors/{instructorId}', maxInstances: 5 },
+  async (event) => {
     const adminEmail = process.env.ADMIN_EMAIL
-    const appUrl = process.env.APP_URL
     if (!adminEmail) {
-      console.warn('ADMIN_EMAIL is not set; skipping daily instructor digest.')
+      console.warn('ADMIN_EMAIL is not set; skipping new instructor notification.')
       return
     }
-    const start = new Date()
-    start.setUTCHours(0, 0, 0, 0)
-    const startTimestamp = Timestamp.fromDate(start)
-    const snap = await db.collection('instructors')
-      .where('requestedAt', '>=', startTimestamp)
-      .get()
-    if (snap.empty) return
-    const lines = snap.docs.map((doc) => {
-      const data = doc.data() || {}
-      const status = data.status ? ` (${data.status})` : ''
-      return `- ${data.email ?? doc.id}${status}`
-    })
+    const data = event.data?.data() || {}
+    const instructorEmail = data.email || event.params.instructorId
+    const status = data.status ? ` (${data.status})` : ''
+    const appUrl = process.env.APP_URL
     const dashboardLine = appUrl ? `\nAdmin dashboard: ${appUrl.replace(/\/$/, '')}/admin\n` : ''
     await sendEmail({
       to: adminEmail,
-      subject: `New instructor signups (${snap.size})`,
+      subject: 'New instructor signup',
       text:
-        `New instructor signups were submitted today:\n${lines.join('\n')}\n` +
+        `A new instructor has signed up:\n- ${instructorEmail}${status}\n` +
         `${dashboardLine}\n` +
         'You are receiving this email because ADMIN_EMAIL is set for this project.',
-      htmlTitle: `New instructor signups (${snap.size})`,
-      preheader: `${snap.size} new instructor signup${snap.size === 1 ? '' : 's'} today.`,
+      htmlTitle: 'New instructor signup',
+      preheader: `New signup: ${instructorEmail}`,
       htmlBody:
-        `<p>The following instructor signups were submitted today:</p>` +
-        `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>` +
+        `<p>A new instructor has signed up:</p>` +
+        `<ul><li>${escapeHtml(`${instructorEmail}${status}`)}</li></ul>` +
         (appUrl ? `<p><a href="${appUrl.replace(/\/$/, '')}/admin">Open the admin dashboard</a></p>` : '') +
         `<p style="color:#64748b;font-size:12px;">You are receiving this email because ADMIN_EMAIL is set for this project.</p>`,
     })

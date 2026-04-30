@@ -5,6 +5,7 @@ import AdminLogin from './routes/AdminLogin'
 import AdminDashboard from './routes/AdminDashboard'
 import InstructorDashboard from './routes/InstructorDashboard'
 import InstructorSignup from './routes/InstructorSignup'
+import ForgotPassword from './routes/ForgotPassword'
 import PublicResults from './routes/PublicResults'
 import PublicResultsGraph from './routes/PublicResultsGraph'
 import DisplayInstructions from './routes/DisplayInstructions'
@@ -17,6 +18,7 @@ export default function App() {
       <Route path="/admin" element={<AdminLogin />} />
       <Route path="/admin/overview" element={<AdminDashboard />} />
       <Route path="/instructor/signup" element={<InstructorSignup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/admin/dashboard" element={<InstructorDashboard />} />
       <Route path="/results" element={<PublicResults />} />
       <Route path="/results/graph" element={<PublicResultsGraph />} />
