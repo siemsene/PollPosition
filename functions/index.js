@@ -320,7 +320,7 @@ exports.notifyInstructorApproved = onDocumentUpdated(
 )
 
 exports.cleanupOldSessions = onSchedule(
-  { region: 'us-central1', schedule: 'every day 03:00', maxInstances: 1 },
+  { region: 'us-central1', schedule: 'every monday 03:00', maxInstances: 1 },
   async () => {
     const cutoff = Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000)
     const snap = await db.collection('sessions')
@@ -338,7 +338,7 @@ exports.cleanupOldSessions = onSchedule(
 )
 
 exports.cleanupIdleAnonymousUsers = onSchedule(
-  { region: 'us-central1', schedule: 'every day 04:00', maxInstances: 1 },
+  { region: 'us-central1', schedule: 'every monday 04:00', maxInstances: 1 },
   async () => {
     const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000
     const adminAuth = getAuth()
