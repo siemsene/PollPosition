@@ -13,7 +13,7 @@ import { useOwnedSessions } from '../lib/useOwnedSessions'
 
 export default function InstructorDashboard() {
   const role = useInstructorRole()
-  const isApproved = role.instructorStatus === 'approved'
+  const isApproved = role.instructorStatus === 'approved' && role.user?.emailVerified === true
   const { sessions, costs, loaded: sessionsLoaded } = useOwnedSessions(isApproved ? role.user?.uid : null)
 
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -79,7 +79,13 @@ export default function InstructorDashboard() {
   if (!role.user || !role.loaded) return null
   if (!role.adminClaimed) return <ClaimAdminCard />
   if (!isApproved) {
-    return <InstructorAccessBlocked isAdmin={role.isAdmin} instructorStatus={role.instructorStatus} />
+    return (
+      <InstructorAccessBlocked
+        isAdmin={role.isAdmin}
+        instructorStatus={role.instructorStatus}
+        emailVerified={role.user?.emailVerified ?? false}
+      />
+    )
   }
 
   return (

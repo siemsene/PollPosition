@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import TopBar from '../components/TopBar'
-import { auth, db } from '../firebase'
+import { auth, db, functions } from '../firebase'
 import { sendPasswordResetEmail } from 'firebase/auth'
+import { httpsCallable } from 'firebase/functions'
 import { collection, deleteField, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { UserCheck, UserMinus } from 'lucide-react'
 import { formatUsd } from '../lib/format'
@@ -16,6 +17,8 @@ export default function AdminDashboard() {
   const [instructorCosts, setInstructorCosts] = useState<Record<string, number>>({})
   const [actionError, setActionError] = useState<string | null>(null)
   const [resetInfo, setResetInfo] = useState<string | null>(null)
+  const [backfillInfo, setBackfillInfo] = useState<string | null>(null)
+  const [backfillBusy, setBackfillBusy] = useState(false)
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
@@ -49,6 +52,11 @@ export default function AdminDashboard() {
   }, [user?.uid])
 
   const isAdmin = !!adminDoc && user?.uid === adminDoc.uid
+
+  const visibleInstructors = useMemo(
+    () => instructors.filter((i) => i.status !== 'removed'),
+    [instructors],
+  )
 
   useEffect(() => {
     if (!isAdmin) {
@@ -110,15 +118,39 @@ export default function AdminDashboard() {
 
   async function removeInstructor(id: string) {
     if (!isAdmin || !auth.currentUser || auth.currentUser.uid === id) return
+    const target = instructors.find((i) => i.id === id)
+    const label = target?.email ?? 'this instructor'
+    if (!window.confirm(`Permanently remove ${label}?\n\nThis deletes their account and cannot be undone.`)) return
     setActionError(null)
     try {
-      await updateDoc(doc(db, 'instructors', id), {
-        status: 'removed',
-        removedAt: serverTimestamp(),
-        removedBy: auth.currentUser.uid,
-      })
+      const call = httpsCallable<{ uid: string }, { ok: boolean; authDeleted: boolean }>(
+        functions,
+        'deleteInstructor',
+      )
+      await call({ uid: id })
     } catch (e: any) {
       setActionError(e?.message ?? 'Failed to remove instructor.')
+    }
+  }
+
+  async function backfillEmailVerified() {
+    if (!isAdmin || backfillBusy) return
+    setActionError(null)
+    setBackfillInfo(null)
+    setBackfillBusy(true)
+    try {
+      const call = httpsCallable<unknown, { updated: number; alreadyVerified: number; missing: number; errors: { uid: string; message: string }[] }>(
+        functions,
+        'backfillInstructorEmailVerified',
+      )
+      const res = await call({})
+      const { updated, alreadyVerified, missing, errors } = res.data
+      const errorPart = errors.length ? ` Errors: ${errors.length}.` : ''
+      setBackfillInfo(`Marked ${updated} verified. Already verified: ${alreadyVerified}. Missing in Auth: ${missing}.${errorPart}`)
+    } catch (e: any) {
+      setActionError(e?.message ?? 'Backfill failed.')
+    } finally {
+      setBackfillBusy(false)
     }
   }
 
@@ -202,6 +234,15 @@ export default function AdminDashboard() {
             <button type="button" className="btn-ghost" onClick={downloadInstructorCsv}>
               Download instructors CSV
             </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={backfillEmailVerified}
+              disabled={backfillBusy}
+              title="One-time: mark existing instructor accounts as email-verified."
+            >
+              {backfillBusy ? 'Backfilling…' : 'Backfill email verification'}
+            </button>
           </div>
         </div>
 
@@ -217,15 +258,21 @@ export default function AdminDashboard() {
             <div className="text-sm text-emerald-100/80 mt-1">{resetInfo}</div>
           </div>
         )}
+        {backfillInfo && (
+          <div className="card p-4 border border-emerald-500/30 bg-emerald-500/10">
+            <div className="font-semibold text-emerald-200">Backfill complete</div>
+            <div className="text-sm text-emerald-100/80 mt-1">{backfillInfo}</div>
+          </div>
+        )}
 
         <div className="card p-4 border border-slate-800 bg-slate-950/40">
           <div className="font-semibold text-slate-100">Instructor approvals</div>
           <div className="text-sm text-slate-400 mt-1">Approve or remove instructors who requested access.</div>
           <div className="mt-4 space-y-3">
-            {instructors.length === 0 && (
+            {visibleInstructors.length === 0 && (
               <div className="text-sm text-slate-400">No instructor requests yet.</div>
             )}
-            {instructors.map((inst) => {
+            {visibleInstructors.map((inst) => {
               const isSelf = inst.id === user.uid
               const cost = instructorCosts[inst.id] ?? 0
               return (

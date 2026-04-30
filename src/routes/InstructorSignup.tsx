@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
 import TopBar from '../components/TopBar'
@@ -58,6 +58,13 @@ export default function InstructorSignup() {
       if (!currentUser) {
         throw new Error('Sign up failed. Try again.')
       }
+      if (!currentUser.emailVerified) {
+        try {
+          await sendEmailVerification(currentUser)
+        } catch (verifyErr) {
+          console.warn('Failed to send verification email', verifyErr)
+        }
+      }
       await setDoc(doc(db, 'instructors', currentUser.uid), {
         email: currentUser.email ?? email.trim(),
         status: 'pending',
@@ -96,7 +103,7 @@ export default function InstructorSignup() {
             <div className="card p-4 border border-emerald-500/30 bg-emerald-500/10">
               <div className="font-semibold text-emerald-200">Application submitted</div>
               <div className="text-sm text-emerald-100/80 mt-1">
-                You will receive an email after approval. You can sign in on the instructor page at any time.
+                We sent a verification link to your email — please open it before signing in. You will also receive an email once your application is approved.
               </div>
               <button type="button" className="btn mt-4" onClick={() => nav('/admin')}>
                 Go to sign in

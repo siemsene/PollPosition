@@ -1,11 +1,15 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Clock, ShieldAlert, ShieldCheck, UserPlus } from 'lucide-react'
+import { sendEmailVerification } from 'firebase/auth'
+import { Clock, MailCheck, ShieldAlert, ShieldCheck, UserPlus } from 'lucide-react'
 import TopBar from './TopBar'
+import { auth } from '../firebase'
 import type { InstructorStatus } from '../lib/useInstructorRole'
 
 type Props = {
   isAdmin: boolean
   instructorStatus: InstructorStatus | null
+  emailVerified?: boolean
 }
 
 type Tone = 'amber' | 'red' | 'slate'
@@ -62,8 +66,43 @@ function StatusCard({
   )
 }
 
-export default function InstructorAccessBlocked({ isAdmin, instructorStatus }: Props) {
+export default function InstructorAccessBlocked({ isAdmin, instructorStatus, emailVerified }: Props) {
   const nav = useNavigate()
+  const [verifyInfo, setVerifyInfo] = useState<string | null>(null)
+  const [verifyError, setVerifyError] = useState<string | null>(null)
+
+  async function resendVerification() {
+    const current = auth.currentUser
+    if (!current) return
+    setVerifyInfo(null)
+    setVerifyError(null)
+    try {
+      await sendEmailVerification(current)
+      setVerifyInfo('Verification email sent. After clicking the link, sign out and back in.')
+    } catch (e: any) {
+      setVerifyError(e?.message ?? 'Failed to send verification email.')
+    }
+  }
+
+  async function refreshAfterVerification() {
+    const current = auth.currentUser
+    if (!current) return
+    setVerifyInfo(null)
+    setVerifyError(null)
+    try {
+      await current.reload()
+      await current.getIdToken(true)
+      if (current.emailVerified) {
+        window.location.reload()
+      } else {
+        setVerifyError('Your email is not verified yet. Open the link we sent and try again.')
+      }
+    } catch (e: any) {
+      setVerifyError(e?.message ?? 'Failed to refresh.')
+    }
+  }
+
+  const needsEmailVerification = instructorStatus === 'approved' && emailVerified === false
 
   return (
     <div>
@@ -77,6 +116,31 @@ export default function InstructorAccessBlocked({ isAdmin, instructorStatus }: P
             body="This account is configured as an admin. Use the admin dashboard to manage instructors."
             action={{ label: 'Go to admin dashboard', onClick: () => nav('/admin/overview') }}
           />
+        )}
+        {needsEmailVerification && (
+          <div className="card p-6 ring-1 ring-amber-400/30">
+            <div className="flex items-start gap-4">
+              <div className="flex-none w-11 h-11 rounded-xl border bg-amber-400/15 border-amber-400/40 text-amber-500 flex items-center justify-center">
+                <MailCheck size={22} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-lg leading-tight">Verify your email</div>
+                <div className="text-sm opacity-80 mt-1.5 leading-relaxed">
+                  Your account is approved, but you still need to verify your email address. Open the link we sent to {auth.currentUser?.email ?? 'your inbox'} to continue.
+                </div>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <button type="button" className="btn" onClick={refreshAfterVerification}>
+                    I verified — refresh
+                  </button>
+                  <button type="button" className="btn-ghost" onClick={resendVerification}>
+                    Resend verification email
+                  </button>
+                </div>
+                {verifyInfo && <div className="text-sm text-emerald-300 mt-3">{verifyInfo}</div>}
+                {verifyError && <div className="text-sm text-red-300 mt-3">{verifyError}</div>}
+              </div>
+            </div>
+          </div>
         )}
         {instructorStatus === 'pending' && (
           <StatusCard

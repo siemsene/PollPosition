@@ -253,6 +253,80 @@ exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSecond
   }
 })
 
+exports.deleteInstructor = onCall({ region: 'us-central1', timeoutSeconds: 30, maxInstances: 5 }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in required.')
+  }
+  const adminSnap = await db.doc('config/admin').get()
+  if (!adminSnap.exists || adminSnap.data()?.uid !== request.auth.uid) {
+    throw new HttpsError('permission-denied', 'Admin access required.')
+  }
+  const uid = typeof request.data?.uid === 'string' ? request.data.uid.trim() : ''
+  if (!uid) {
+    throw new HttpsError('invalid-argument', 'uid is required.')
+  }
+  if (uid === request.auth.uid) {
+    throw new HttpsError('failed-precondition', 'You cannot remove your own account.')
+  }
+
+  const adminAuth = getAuth()
+  let authDeleted = true
+  try {
+    await adminAuth.deleteUser(uid)
+  } catch (err) {
+    if (err && err.code === 'auth/user-not-found') {
+      authDeleted = false
+    } else {
+      throw new HttpsError('internal', err?.message ?? 'Failed to delete auth user.')
+    }
+  }
+
+  await Promise.allSettled([
+    db.doc(`instructors/${uid}`).delete(),
+    db.doc(`instructor_costs/${uid}`).delete(),
+  ])
+
+  return { ok: true, authDeleted }
+})
+
+exports.backfillInstructorEmailVerified = onCall({ region: 'us-central1', timeoutSeconds: 120, maxInstances: 1 }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in required.')
+  }
+  const adminSnap = await db.doc('config/admin').get()
+  if (!adminSnap.exists || adminSnap.data()?.uid !== request.auth.uid) {
+    throw new HttpsError('permission-denied', 'Admin access required.')
+  }
+
+  const adminAuth = getAuth()
+  const instructorsSnap = await db.collection('instructors').get()
+  let updated = 0
+  let alreadyVerified = 0
+  let missing = 0
+  const errors = []
+
+  for (const docSnap of instructorsSnap.docs) {
+    const uid = docSnap.id
+    try {
+      const userRecord = await adminAuth.getUser(uid)
+      if (userRecord.emailVerified) {
+        alreadyVerified += 1
+        continue
+      }
+      await adminAuth.updateUser(uid, { emailVerified: true })
+      updated += 1
+    } catch (err) {
+      if (err && err.code === 'auth/user-not-found') {
+        missing += 1
+      } else {
+        errors.push({ uid, message: err?.message ?? String(err) })
+      }
+    }
+  }
+
+  return { updated, alreadyVerified, missing, errors }
+})
+
 exports.notifyAdminOfNewInstructor = onDocumentCreated(
   { region: 'us-central1', document: 'instructors/{instructorId}', maxInstances: 5 },
   async (event) => {
