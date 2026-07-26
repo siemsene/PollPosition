@@ -15,6 +15,11 @@ const OPENAI_OUTPUT_USD_PER_1M = Number(process.env.OPENAI_OUTPUT_USD_PER_1M ?? 
 const FIRESTORE_WRITE_USD_PER_100K = Number(process.env.FIRESTORE_WRITE_USD_PER_100K ?? '0.18')
 const FIRESTORE_WRITE_USD = FIRESTORE_WRITE_USD_PER_100K / 100000
 
+const COST_FIELDS = ['openaiInputTokens', 'openaiOutputTokens', 'openaiUsd', 'firestoreWrites', 'firestoreUsd', 'totalUsd']
+
+// Per-session costs are incremented live; instructor totals are recomputed
+// hourly by aggregateInstructorCosts (plus a "carried" bucket for cleaned-up
+// sessions), so high-frequency writes touch only one cost document.
 async function incrementCostsForSession({ sessionId, ownerUid, firestoreWrites = 0, openaiInputTokens = 0, openaiOutputTokens = 0 }) {
   if (!sessionId || !ownerUid) return
   const openaiUsd = (openaiInputTokens / 1_000_000) * OPENAI_INPUT_USD_PER_1M
@@ -23,38 +28,30 @@ async function incrementCostsForSession({ sessionId, ownerUid, firestoreWrites =
   const totalUsd = openaiUsd + firestoreUsd
   if (totalUsd <= 0 && firestoreWrites <= 0 && openaiInputTokens <= 0 && openaiOutputTokens <= 0) return
 
-  const sessionRef = db.doc(`session_costs/${sessionId}`)
-  const instructorRef = db.doc(`instructor_costs/${ownerUid}`)
-  await Promise.all([
-    sessionRef.set({
-      sessionId,
-      ownerUid,
-      openaiInputTokens: FieldValue.increment(openaiInputTokens),
-      openaiOutputTokens: FieldValue.increment(openaiOutputTokens),
-      openaiUsd: FieldValue.increment(openaiUsd),
-      firestoreWrites: FieldValue.increment(firestoreWrites),
-      firestoreUsd: FieldValue.increment(firestoreUsd),
-      totalUsd: FieldValue.increment(totalUsd),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true }),
-    instructorRef.set({
-      instructorId: ownerUid,
-      openaiInputTokens: FieldValue.increment(openaiInputTokens),
-      openaiOutputTokens: FieldValue.increment(openaiOutputTokens),
-      openaiUsd: FieldValue.increment(openaiUsd),
-      firestoreWrites: FieldValue.increment(firestoreWrites),
-      firestoreUsd: FieldValue.increment(firestoreUsd),
-      totalUsd: FieldValue.increment(totalUsd),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true }),
-  ])
+  await db.doc(`session_costs/${sessionId}`).set({
+    sessionId,
+    ownerUid,
+    openaiInputTokens: FieldValue.increment(openaiInputTokens),
+    openaiOutputTokens: FieldValue.increment(openaiOutputTokens),
+    openaiUsd: FieldValue.increment(openaiUsd),
+    firestoreWrites: FieldValue.increment(firestoreWrites),
+    firestoreUsd: FieldValue.increment(firestoreUsd),
+    totalUsd: FieldValue.increment(totalUsd),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
 }
+
+// Session owners never change, so warm instances can skip the lookup read.
+const ownerCache = new Map()
 
 async function resolveSessionOwner(sessionId) {
   if (!sessionId) return null
+  if (ownerCache.has(sessionId)) return ownerCache.get(sessionId)
   const snap = await db.doc(`sessions/${sessionId}`).get()
   if (!snap.exists) return null
-  return snap.data()?.ownerUid ?? null
+  const owner = snap.data()?.ownerUid ?? null
+  if (owner) ownerCache.set(sessionId, owner)
+  return owner
 }
 
 function renderEmailHtml({ title, preheader, body }) {
@@ -131,47 +128,14 @@ async function sendEmail({ to, subject, text, htmlTitle, htmlBody, preheader }) 
   })
   if (!res.ok) {
     const detail = await res.text()
-    console.warn(`SendGrid error ${res.status}: ${detail}`)
+    console.warn(`SMTP2GO error ${res.status}: ${detail}`)
   }
 }
 
-exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSeconds: 60, enforceAppCheck: true, maxInstances: 10 }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Sign in required.')
-  }
-
-  const [adminSnap, instructorSnap] = await Promise.all([
-    db.doc('config/admin').get(),
-    db.doc(`instructors/${request.auth.uid}`).get(),
-  ])
-  const isAdmin = adminSnap.exists && adminSnap.data()?.uid === request.auth.uid
-  const isInstructor = instructorSnap.exists && instructorSnap.data()?.status === 'approved'
-  if (!isAdmin && !isInstructor) {
-    throw new HttpsError('permission-denied', 'Instructor access required.')
-  }
-
+async function runSynthesis({ question, items, mode }) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
-    throw new HttpsError('failed-precondition', 'OpenAI API key is not configured.')
-  }
-
-  const items = Array.isArray(request.data?.items) ? request.data.items : []
-  const question = typeof request.data?.question === 'string' ? request.data.question : null
-  const mode = request.data?.mode === 'summary' ? 'summary' : 'grouped'
-
-  const cleaned = items
-    .filter((item) => typeof item === 'string')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-    .slice(0, 200)
-
-  if (cleaned.length === 0) {
-    throw new HttpsError('invalid-argument', 'No responses to synthesize.')
-  }
-
-  const prompt = {
-    question,
-    responses: cleaned,
+    throw new Error('OpenAI API key is not configured.')
   }
 
   const systemContent = mode === 'summary'
@@ -200,7 +164,7 @@ exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSecond
         },
         {
           role: 'user',
-          content: JSON.stringify(prompt),
+          content: JSON.stringify({ question, responses: items }),
         },
       ],
     }),
@@ -208,20 +172,20 @@ exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSecond
 
   if (!res.ok) {
     const errorText = await res.text()
-    throw new HttpsError('internal', `OpenAI request failed (${res.status}). ${errorText}`)
+    throw new Error(`OpenAI request failed (${res.status}). ${errorText}`)
   }
 
   const data = await res.json()
   const content = data?.choices?.[0]?.message?.content
   if (!content) {
-    throw new HttpsError('internal', 'OpenAI response missing content.')
+    throw new Error('OpenAI response missing content.')
   }
 
   let parsed
   try {
     parsed = JSON.parse(content)
   } catch (_err) {
-    throw new HttpsError('internal', 'Failed to parse OpenAI JSON response.')
+    throw new Error('Failed to parse OpenAI JSON response.')
   }
 
   const groups = Array.isArray(parsed?.groups)
@@ -234,22 +198,73 @@ exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSecond
       }))
     : []
 
+  const inputTokens = Number(data?.usage?.prompt_tokens ?? 0)
+  const outputTokens = Number(data?.usage?.completion_tokens ?? 0)
+
+  return {
+    overallSummary: typeof parsed?.overall_summary === 'string' ? parsed.overall_summary : undefined,
+    groups,
+    usage: {
+      inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
+      outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
+    },
+  }
+}
+
+exports.synthesizeShortResponses = onCall({ region: 'us-central1', timeoutSeconds: 60, enforceAppCheck: true, maxInstances: 10 }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in required.')
+  }
+
+  const [adminSnap, instructorSnap] = await Promise.all([
+    db.doc('config/admin').get(),
+    db.doc(`instructors/${request.auth.uid}`).get(),
+  ])
+  const isAdmin = adminSnap.exists && adminSnap.data()?.uid === request.auth.uid
+  const isInstructor = instructorSnap.exists && instructorSnap.data()?.status === 'approved'
+  if (!isAdmin && !isInstructor) {
+    throw new HttpsError('permission-denied', 'Instructor access required.')
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    throw new HttpsError('failed-precondition', 'OpenAI API key is not configured.')
+  }
+
+  const items = Array.isArray(request.data?.items) ? request.data.items : []
+  const question = typeof request.data?.question === 'string' ? request.data.question : null
+  const mode = request.data?.mode === 'summary' ? 'summary' : 'grouped'
+
+  const cleaned = items
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .slice(0, 200)
+
+  if (cleaned.length === 0) {
+    throw new HttpsError('invalid-argument', 'No responses to synthesize.')
+  }
+
+  let result
+  try {
+    result = await runSynthesis({ question, items: cleaned, mode })
+  } catch (err) {
+    throw new HttpsError('internal', err?.message ?? 'Synthesis failed.')
+  }
+
   const sessionId = typeof request.data?.sessionId === 'string' ? request.data.sessionId : null
   if (sessionId) {
     const ownerUid = await resolveSessionOwner(sessionId)
-    const inputTokens = Number(data?.usage?.prompt_tokens ?? 0)
-    const outputTokens = Number(data?.usage?.completion_tokens ?? 0)
     await incrementCostsForSession({
       sessionId,
       ownerUid,
-      openaiInputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
-      openaiOutputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
+      openaiInputTokens: result.usage.inputTokens,
+      openaiOutputTokens: result.usage.outputTokens,
     })
   }
 
   return {
-    overall_summary: typeof parsed?.overall_summary === 'string' ? parsed.overall_summary : undefined,
-    groups,
+    overall_summary: result.overallSummary,
+    groups: result.groups,
   }
 })
 
@@ -392,12 +407,10 @@ exports.cleanupOldSessions = onSchedule(
       .where('createdAt', '<', cutoff)
       .get()
     if (snap.empty) return
-    const deletions = snap.docs.map(async (docSnap) => {
-      await Promise.allSettled([
-        db.recursiveDelete(docSnap.ref),
-        db.doc(`session_costs/${docSnap.id}`).delete().catch(() => {}),
-      ])
-    })
+    // session_costs docs are left in place: aggregateInstructorCosts folds
+    // costs of deleted sessions into the owner's "carried" bucket atomically
+    // with removing the doc, so a failed fold is retried instead of lost.
+    const deletions = snap.docs.map((docSnap) => db.recursiveDelete(docSnap.ref))
     await Promise.allSettled(deletions)
   },
 )
@@ -445,9 +458,11 @@ function escapeHtml(value) {
 exports.trackSessionWrites = onDocumentWritten(
   { region: 'us-central1', document: 'sessions/{sessionId}', maxInstances: 20 },
   async (event) => {
+    // Deletions are excluded so cleanup runs can't recreate cost docs for
+    // sessions that were just removed.
+    if (!event.data?.after?.exists) return
     const sessionId = event.params.sessionId
-    const after = event.data?.after?.data() || {}
-    const ownerUid = after.ownerUid || (event.data?.before?.data() || {}).ownerUid
+    const ownerUid = event.data.after.data()?.ownerUid
     await incrementCostsForSession({ sessionId, ownerUid, firestoreWrites: 1 })
   },
 )
@@ -455,18 +470,225 @@ exports.trackSessionWrites = onDocumentWritten(
 exports.trackQuestionWrites = onDocumentWritten(
   { region: 'us-central1', document: 'sessions/{sessionId}/questions/{questionId}', maxInstances: 20 },
   async (event) => {
+    if (!event.data?.after?.exists) return
     const sessionId = event.params.sessionId
     const ownerUid = await resolveSessionOwner(sessionId)
     await incrementCostsForSession({ sessionId, ownerUid, firestoreWrites: 1 })
   },
 )
 
-exports.trackResponseWrites = onDocumentWritten(
-  { region: 'us-central1', document: 'sessions/{sessionId}/questions/{questionId}/responses/{responseId}', maxInstances: 50 },
+const AUTO_SYNTH_MIN_ITEMS = 3
+const AUTO_SYNTH_MIN_DELTA = 3
+const AUTO_SYNTH_MIN_INTERVAL_MS = 20_000
+const AUTO_SYNTH_MAX_RUNS = 40
+const AUTO_SYNTH_LOCK_TIMEOUT_MS = 90_000
+
+// Keeps the projector's synthesis fresh for extended-text questions without
+// any instructor interaction. Cost guards + a transaction lock bound OpenAI
+// usage to at most one call per ~20s per question, 40 auto runs max.
+async function maybeAutoSynthesize({ sessionId, questionId, ownerUid }) {
+  if (!process.env.OPENAI_API_KEY) return
+
+  const questionRef = db.doc(`sessions/${sessionId}/questions/${questionId}`)
+  const [questionSnap, sessionSnap] = await Promise.all([
+    questionRef.get(),
+    db.doc(`sessions/${sessionId}`).get(),
+  ])
+  if (!questionSnap.exists || !sessionSnap.exists) return
+  const question = questionSnap.data()
+  if (question.type !== 'long') return
+  const session = sessionSnap.data()
+  if (session.activeQuestionId !== questionId || session.isOpen === false) return
+
+  const countSnap = await questionRef.collection('responses').count().get()
+  const n = countSnap.data().count
+  if (n < AUTO_SYNTH_MIN_ITEMS) return
+  if (n - (question.synthesizedCount ?? 0) < AUTO_SYNTH_MIN_DELTA) return
+
+  const claimed = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(questionRef)
+    if (!snap.exists) return false
+    const data = snap.data()
+    const now = Date.now()
+    const lastMs = data.synthesizedAt?.toMillis?.() ?? 0
+    if (now - lastMs < AUTO_SYNTH_MIN_INTERVAL_MS) return false
+    if ((data.autoSynthCount ?? 0) >= AUTO_SYNTH_MAX_RUNS) return false
+    const lockMs = data.synthLockAt?.toMillis?.() ?? 0
+    if (lockMs && now - lockMs < AUTO_SYNTH_LOCK_TIMEOUT_MS) return false
+    tx.update(questionRef, {
+      synthLockAt: Timestamp.now(),
+      autoSynthCount: FieldValue.increment(1),
+    })
+    return true
+  })
+  if (!claimed) return
+
+  try {
+    const respSnap = await questionRef.collection('responses')
+      .orderBy('submittedAt', 'desc')
+      .limit(200)
+      .get()
+    const items = respSnap.docs
+      .map((d) => (typeof d.data()?.value === 'string' ? d.data().value.trim() : ''))
+      .filter((v) => v.length > 0)
+    if (items.length === 0) {
+      await questionRef.update({ synthLockAt: FieldValue.delete() })
+      return
+    }
+
+    const { overallSummary, groups, usage } = await runSynthesis({
+      question: question.prompt ?? null,
+      items,
+      mode: 'summary',
+    })
+
+    // Must match the camelCase shape the web client persists and reads.
+    await questionRef.update({
+      synthesis: { overallSummary: overallSummary ?? '', groups },
+      synthesizedAt: FieldValue.serverTimestamp(),
+      synthesizedCount: items.length,
+      synthLockAt: FieldValue.delete(),
+    })
+
+    await incrementCostsForSession({
+      sessionId,
+      ownerUid,
+      openaiInputTokens: usage.inputTokens,
+      openaiOutputTokens: usage.outputTokens,
+    })
+  } catch (err) {
+    await questionRef.update({ synthLockAt: FieldValue.delete() }).catch(() => {})
+    throw err
+  }
+}
+
+exports.onResponseWritten = onDocumentWritten(
+  { region: 'us-central1', document: 'sessions/{sessionId}/questions/{questionId}/responses/{responseId}', maxInstances: 50, timeoutSeconds: 60 },
   async (event) => {
-    const sessionId = event.params.sessionId
+    if (!event.data?.after?.exists) return
+    const { sessionId, questionId } = event.params
     const ownerUid = await resolveSessionOwner(sessionId)
     await incrementCostsForSession({ sessionId, ownerUid, firestoreWrites: 1 })
+    try {
+      await maybeAutoSynthesize({ sessionId, questionId, ownerUid })
+    } catch (err) {
+      console.warn(`Auto-synthesis failed for ${sessionId}/${questionId}:`, err?.message ?? err)
+    }
+  },
+)
+
+// Recomputes instructor totals as carried + sum(live session_costs). The
+// "carried" bucket preserves spend from sessions that no longer exist: this
+// function folds orphaned session_costs docs into it atomically with their
+// deletion, and seeds it once for docs migrated from the old live-increment
+// scheme. Only instructors that still exist (or the admin) are written, so
+// deleted accounts are not resurrected.
+exports.aggregateInstructorCosts = onSchedule(
+  { region: 'us-central1', schedule: 'every 1 hours', maxInstances: 1, timeoutSeconds: 540 },
+  async () => {
+    const [sessionCostsSnap, instructorCostsSnap, instructorsSnap, adminSnap] = await Promise.all([
+      db.collection('session_costs').get(),
+      db.collection('instructor_costs').get(),
+      db.collection('instructors').get(),
+      db.doc('config/admin').get(),
+    ])
+
+    const validOwners = new Set(instructorsSnap.docs.map((d) => d.id))
+    const adminUid = adminSnap.exists ? adminSnap.data()?.uid : null
+    if (adminUid) validOwners.add(adminUid)
+
+    const zeroed = () => Object.fromEntries(COST_FIELDS.map((f) => [f, 0]))
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0)
+
+    // Totals per owner across ALL current session_costs docs (including ones
+    // whose session is already gone) — needed for migration seeding below.
+    const costDocs = sessionCostsSnap.docs
+    const allSums = new Map()
+    for (const docSnap of costDocs) {
+      const data = docSnap.data()
+      const owner = data?.ownerUid
+      if (!owner) continue
+      const entry = allSums.get(owner) ?? zeroed()
+      for (const f of COST_FIELDS) entry[f] += num(data[f])
+      allSums.set(owner, entry)
+    }
+
+    // One-time migration: instructor_costs docs written by the old
+    // live-increment scheme carry history for already-deleted sessions in
+    // their totals. Preserve it as the carried baseline.
+    for (const docSnap of instructorCostsSnap.docs) {
+      const data = docSnap.data()
+      if (data?.aggregationSeeded || data?.carried) continue
+      const live = allSums.get(docSnap.id) ?? zeroed()
+      const carried = {}
+      for (const f of COST_FIELDS) carried[f] = Math.max(0, num(data[f]) - live[f])
+      try {
+        await docSnap.ref.set({ carried, aggregationSeeded: true }, { merge: true })
+      } catch (err) {
+        console.warn(`Failed to seed carried costs for ${docSnap.id}:`, err?.message ?? err)
+      }
+    }
+
+    // Fold session_costs docs whose session no longer exists (weekly cleanup
+    // or manual deletion) into the owner's carried bucket, atomically with
+    // deleting the doc. A failed fold keeps the doc and is retried next run.
+    const sessionRefs = costDocs.map((d) => db.doc(`sessions/${d.id}`))
+    const sessionSnaps = sessionRefs.length ? await db.getAll(...sessionRefs) : []
+    const liveDocs = []
+    for (let i = 0; i < costDocs.length; i++) {
+      const docSnap = costDocs[i]
+      if (sessionSnaps[i].exists) {
+        liveDocs.push(docSnap)
+        continue
+      }
+      try {
+        await db.runTransaction(async (tx) => {
+          const snap = await tx.get(docSnap.ref)
+          if (!snap.exists) return
+          const data = snap.data()
+          const owner = data?.ownerUid
+          if (owner && validOwners.has(owner)) {
+            const carried = {}
+            for (const f of COST_FIELDS) carried[f] = FieldValue.increment(num(data[f]))
+            tx.set(db.doc(`instructor_costs/${owner}`), {
+              instructorId: owner,
+              carried,
+              aggregationSeeded: true,
+            }, { merge: true })
+          }
+          tx.delete(snap.ref)
+        })
+      } catch (err) {
+        console.warn(`Failed to fold costs for deleted session ${docSnap.id}:`, err?.message ?? err)
+        liveDocs.push(docSnap)
+      }
+    }
+
+    // Recompute totals for owners that still exist.
+    const refreshedSnap = await db.collection('instructor_costs').get()
+    const carriedByUid = new Map(refreshedSnap.docs.map((d) => [d.id, d.data()?.carried ?? {}]))
+
+    const liveSums = new Map()
+    for (const docSnap of liveDocs) {
+      const data = docSnap.data()
+      const owner = data?.ownerUid
+      if (!owner) continue
+      const entry = liveSums.get(owner) ?? zeroed()
+      for (const f of COST_FIELDS) entry[f] += num(data[f])
+      liveSums.set(owner, entry)
+    }
+
+    const owners = new Set([...liveSums.keys(), ...carriedByUid.keys()])
+    const writes = []
+    for (const uid of owners) {
+      if (!validOwners.has(uid)) continue
+      const live = liveSums.get(uid) ?? zeroed()
+      const carried = carriedByUid.get(uid) ?? {}
+      const docData = { instructorId: uid, aggregationSeeded: true, updatedAt: FieldValue.serverTimestamp() }
+      for (const f of COST_FIELDS) docData[f] = live[f] + num(carried[f])
+      writes.push(db.doc(`instructor_costs/${uid}`).set(docData, { merge: true }))
+    }
+    await Promise.allSettled(writes)
   },
 )
 

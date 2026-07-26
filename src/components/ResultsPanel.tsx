@@ -4,12 +4,18 @@ import { Maximize2 } from 'lucide-react'
 import { excludeOutliers, numericHistogram, safeParseNumber } from '../lib/hist'
 import { wordFrequencies } from '../lib/text'
 import { synthesizeShortResponses, type SynthesisResult } from '../lib/synthesis'
+import { friendlyError } from '../lib/errors'
+import { scaleBounds } from '../lib/scale'
 import { db } from '../firebase'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import type { QuestionType } from './QuestionEditor'
 import WordCloudCanvas from './WordCloudCanvas'
 
 type Resp = { id: string, value: unknown, submittedAt?: any }
+
+// Keep in sync with AUTO_SYNTH_MIN_ITEMS in functions/index.js — below this
+// count the server will not auto-synthesize, so don't promise a summary.
+const AUTO_SYNTH_MIN_ITEMS = 3
 
 export default function ResultsPanel({
   type,
@@ -26,6 +32,9 @@ export default function ResultsPanel({
   synthesisFromStore = null,
   synthesizedCountFromStore = null,
   synthesisTarget,
+  scaleMeta,
+  correctOptions = null,
+  revealAnswer = false,
 }: {
   type: QuestionType
   options: string[]
@@ -41,6 +50,9 @@ export default function ResultsPanel({
   synthesisFromStore?: SynthesisResult | null
   synthesizedCountFromStore?: number | null
   synthesisTarget?: { sessionId: string, questionId: string }
+  scaleMeta?: { min?: number | null, max?: number | null, minLabel?: string | null, maxLabel?: string | null }
+  correctOptions?: string[] | null
+  revealAnswer?: boolean
 }) {
   const isExpanded = variant === 'expanded'
 
@@ -102,8 +114,73 @@ export default function ResultsPanel({
   }, [responses])
 
   const words = useMemo(() => {
+    if (type !== 'cloud') return [] as { text: string, value: number }[]
     return wordFrequencies(shortItems.map((item) => item.text), 90)
-  }, [shortItems])
+  }, [shortItems, type])
+
+  const correctSet = useMemo(() => new Set(correctOptions ?? []), [correctOptions])
+  const showCorrect = revealAnswer && correctSet.size > 0 && (type === 'mcq' || type === 'multi')
+
+  const { min: scaleMin, max: scaleMax } = scaleBounds(scaleMeta?.min, scaleMeta?.max)
+
+  const scaleData = useMemo(() => {
+    if (type !== 'scale') return { bins: [] as { name: string, count: number }[], mean: null as number | null, n: 0 }
+    const counts = new Map<number, number>()
+    for (let v = scaleMin; v <= scaleMax; v++) counts.set(v, 0)
+    let sum = 0
+    let n = 0
+    for (const r of responses) {
+      const v = safeParseNumber(r.value)
+      if (v === null || !Number.isInteger(v) || !counts.has(v)) continue
+      counts.set(v, (counts.get(v) ?? 0) + 1)
+      sum += v
+      n += 1
+    }
+    return {
+      bins: Array.from(counts.entries()).map(([value, count]) => ({ name: String(value), count })),
+      mean: n > 0 ? sum / n : null,
+      n,
+    }
+  }, [responses, type, scaleMin, scaleMax])
+
+  const multiData = useMemo(() => {
+    if (type !== 'multi') return [] as { name: string, count: number }[]
+    const counts = new Map<string, number>()
+    for (const opt of options) counts.set(opt, 0)
+    for (const r of responses) {
+      if (!Array.isArray(r.value)) continue
+      const chosen = new Set(r.value.filter((v): v is string => typeof v === 'string'))
+      for (const opt of chosen) {
+        if (counts.has(opt)) counts.set(opt, (counts.get(opt) ?? 0) + 1)
+      }
+    }
+    return Array.from(counts.entries()).map(([name, count]) => ({ name, count }))
+  }, [responses, options, type])
+
+  const rankData = useMemo(() => {
+    if (type !== 'rank') return { rows: [] as { name: string, avg: number }[], n: 0 }
+    const sums = new Map<string, { total: number, n: number }>()
+    for (const opt of options) sums.set(opt, { total: 0, n: 0 })
+    let n = 0
+    for (const r of responses) {
+      if (!Array.isArray(r.value)) continue
+      let counted = false
+      for (const opt of options) {
+        const idx = r.value.indexOf(opt)
+        if (idx < 0) continue
+        const entry = sums.get(opt)!
+        entry.total += idx + 1
+        entry.n += 1
+        counted = true
+      }
+      if (counted) n += 1
+    }
+    const rows = Array.from(sums.entries())
+      .filter(([, s]) => s.n > 0)
+      .map(([name, s]) => ({ name, avg: s.total / s.n }))
+      .sort((a, b) => a.avg - b.avg)
+    return { rows, n }
+  }, [responses, options, type])
 
   const [synthesis, setSynthesis] = useState<SynthesisResult | null>(null)
   const [synthesisError, setSynthesisError] = useState<string | null>(null)
@@ -140,6 +217,13 @@ export default function ResultsPanel({
   const canSynthesize = allowSynthesis && (type === 'short' || type === 'long')
   const synthesisItemCount = type === 'long' ? longItems.length : shortItems.length
   const isSynthesisStale = synthesis && synthesizedForCount !== null && synthesizedForCount !== synthesisItemCount
+  const scaleEndLabels = [
+    scaleMeta?.minLabel ? `${scaleMin} = ${scaleMeta.minLabel}` : null,
+    scaleMeta?.maxLabel ? `${scaleMax} = ${scaleMeta.maxLabel}` : null,
+  ].filter(Boolean).join(' · ')
+  const synthesisText = synthesis
+    ? ((synthesis.overallSummary?.trim() || synthesis.groups.map((group) => group.summary).join(' ').trim()) || null)
+    : null
 
   async function handleSynthesize() {
     if (synthesizing || synthesisItemCount === 0) return
@@ -163,11 +247,11 @@ export default function ResultsPanel({
             synthesizedCount: baseItems.length,
           })
         } catch (err: any) {
-          setSynthesisError(err?.message ?? 'Synthesis saved locally, but failed to publish.')
+          setSynthesisError(friendlyError(err, 'Synthesis was generated but could not be published to viewers.'))
         }
       }
     } catch (err: any) {
-      setSynthesisError(err?.message ?? 'Failed to synthesize responses.')
+      setSynthesisError(friendlyError(err, 'Failed to synthesize responses. Please try again.'))
     } finally {
       setSynthesizing(false)
     }
@@ -184,10 +268,10 @@ export default function ResultsPanel({
       ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative'
       : 'h-[320px] w-full rounded-2xl border border-slate-700/60 bg-white p-3 relative')
   const wordCloudClass = fitHeight
-    ? 'h-full w-full bg-[#f3ead7] p-2'
+    ? 'h-full w-full bg-[#f3ead7] p-2 relative'
     : (isExpanded
-      ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2'
-      : 'h-[360px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2')
+      ? 'h-[520px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2 relative'
+      : 'h-[360px] w-full rounded-2xl border border-slate-700/60 bg-[#f3ead7] p-2 relative')
 
   return (
     <div className={wrapperClass}>
@@ -225,7 +309,7 @@ export default function ResultsPanel({
         </div>
       )}
       <div className={contentClass}>
-        {(type === 'mcq' || type === 'number') && (
+        {(type === 'mcq' || type === 'number' || type === 'scale' || type === 'multi') && (
           <div className={chartBoxClass}>
             {question && (
               <>
@@ -233,14 +317,18 @@ export default function ResultsPanel({
                   {question}
                 </div>
                 <div className={subtitleClass}>
-                  {responses.length} response(s)
+                  {type === 'scale'
+                    ? `${scaleData.n} response(s)${scaleData.mean !== null ? ` · average ${scaleData.mean.toFixed(2)}` : ''}${scaleEndLabels ? ` · ${scaleEndLabels}` : ''}`
+                    : type === 'multi'
+                      ? `${responses.length} respondent(s) · select-all counts can exceed the number of respondents${showCorrect ? ' · correct answers in green' : ''}`
+                      : `${responses.length} response(s)${showCorrect ? ' · correct answer in green' : ''}`}
                 </div>
               </>
             )}
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={type === 'mcq' ? mcqData : numData.hist.bins}
-                margin={{ left: 8, right: 8, top: chartMarginTop, bottom: type === 'mcq' ? (isExpanded ? 32 : 24) : 8 }}
+                data={type === 'mcq' ? mcqData : type === 'scale' ? scaleData.bins : type === 'multi' ? multiData : numData.hist.bins}
+                margin={{ left: 8, right: 8, top: chartMarginTop, bottom: (type === 'mcq' || type === 'multi') ? (isExpanded ? 32 : 24) : 8 }}
                 barCategoryGap="20%"
                 barGap={2}
               >
@@ -252,8 +340,8 @@ export default function ResultsPanel({
                   axisLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
                   tickLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
                   padding={{ left: 8, right: 8 }}
-                  height={type === 'mcq' ? (isExpanded ? 64 : 48) : (isExpanded ? 44 : 32)}
-                  tickFormatter={type === 'mcq' ? (v: string) => truncateLabel(v, mcqTruncateLimit) : undefined}
+                  height={(type === 'mcq' || type === 'multi') ? (isExpanded ? 64 : 48) : (isExpanded ? 44 : 32)}
+                  tickFormatter={(type === 'mcq' || type === 'multi') ? (v: string) => truncateLabel(v, mcqTruncateLimit) : undefined}
                 />
                 <YAxis
                   tick={{ fill: CHART_AXIS, fontSize: axisFontSize, fontWeight: isExpanded ? 600 : 400 }}
@@ -271,9 +359,14 @@ export default function ResultsPanel({
                   dataKey="count"
                   radius={[6, 6, 0, 0]}
                   fill={CHART_PRIMARY}
-                  isAnimationActive
-                  animationDuration={450}
+                  isAnimationActive={false}
                 >
+                  {showCorrect && (type === 'mcq' ? mcqData : multiData).map((entry) => (
+                    <Cell
+                      key={entry.name}
+                      fill={correctSet.has(entry.name) ? CHART_CORRECT : CHART_PRIMARY}
+                    />
+                  ))}
                   <LabelList
                     dataKey="count"
                     position="top"
@@ -285,6 +378,75 @@ export default function ResultsPanel({
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        )}
+
+        {type === 'rank' && (
+          <div className={chartBoxClass}>
+            {question && (
+              <>
+                <div className={titleClass}>
+                  {question}
+                </div>
+                <div className={subtitleClass}>
+                  {rankData.n} ranking(s) · average rank, lower is better
+                </div>
+              </>
+            )}
+            {rankData.rows.length === 0 ? (
+              <div className={`h-full flex items-center justify-center text-slate-500 ${isExpanded ? 'text-xl' : 'text-sm'}`}>
+                No rankings yet.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={rankData.rows}
+                  layout="vertical"
+                  margin={{ left: 8, right: isExpanded ? 56 : 40, top: chartMarginTop, bottom: 8 }}
+                  barCategoryGap="25%"
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
+                  <XAxis
+                    type="number"
+                    domain={[0, Math.max(1, options.length)]}
+                    tick={{ fill: CHART_AXIS, fontSize: axisFontSize, fontWeight: isExpanded ? 600 : 400 }}
+                    allowDecimals={false}
+                    axisLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
+                    tickLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fill: CHART_AXIS, fontSize: axisFontSize, fontWeight: isExpanded ? 600 : 400 }}
+                    interval={0}
+                    axisLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
+                    tickLine={{ stroke: CHART_AXIS, strokeWidth: 1 }}
+                    width={isExpanded ? 180 : 110}
+                    tickFormatter={(v: string) => truncateLabel(v, isExpanded ? 24 : 16)}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(37, 99, 235, 0.08)' }}
+                    formatter={(value: any) => [`average rank ${Number(value).toFixed(2)} (1 = best)`, '']}
+                    contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: tooltipFontSize }}
+                  />
+                  <Bar
+                    dataKey="avg"
+                    radius={[0, 6, 6, 0]}
+                    fill={CHART_PRIMARY}
+                    isAnimationActive={false}
+                  >
+                    <LabelList
+                      dataKey="avg"
+                      position="right"
+                      fill={CHART_LABEL}
+                      fontSize={valueLabelFontSize}
+                      fontWeight={isExpanded ? 700 : 600}
+                      formatter={(value: number) => value.toFixed(2)}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         )}
 
@@ -314,8 +476,7 @@ export default function ResultsPanel({
                     innerRadius={isExpanded ? 80 : 60}
                     outerRadius={isExpanded ? 150 : 105}
                     paddingAngle={2}
-                    isAnimationActive
-                    animationDuration={450}
+                    isAnimationActive={false}
                     label={(props: any) => renderPieLabel(props, pieLabelFontSize)}
                     labelLine={false}
                   >
@@ -345,6 +506,30 @@ export default function ResultsPanel({
                 </PieChart>
               </ResponsiveContainer>
             )}
+          </div>
+        )}
+
+        {type === 'cloud' && (
+          <div className={wordCloudClass}>
+            {question && (
+              <>
+                <div className={titleClass}>
+                  {question}
+                </div>
+                <div className={subtitleClass}>
+                  {responses.length} response(s)
+                </div>
+              </>
+            )}
+            <div className="h-full w-full" style={{ paddingTop: question ? (isExpanded ? 88 : 48) : 0 }}>
+              {words.length === 0 ? (
+                <div className={`h-full flex items-center justify-center text-slate-600 ${isExpanded ? 'text-xl' : 'text-sm'}`}>
+                  No answers yet.
+                </div>
+              ) : (
+                <WordCloudCanvas words={words} large={isExpanded} />
+              )}
+            </div>
           </div>
         )}
 
@@ -399,39 +584,58 @@ export default function ResultsPanel({
         )}
 
         {type === 'long' && (
-          <div className="space-y-4">
-            <div className={wordCloudClass}>
-              {words.length === 0 ? (
-                <div className={`text-slate-600 p-3 ${isExpanded ? 'text-xl' : 'text-sm'}`}>No answers yet.</div>
-              ) : (
-                <WordCloudCanvas words={words} large={isExpanded} />
+          <div className={fitHeight ? 'h-full' : 'space-y-2'}>
+            <div className={chartBoxClass}>
+              {question && (
+                <>
+                  <div className={titleClass}>
+                    {question}
+                  </div>
+                  <div className={subtitleClass}>
+                    {longItems.length} response(s)
+                    {synthesisText && synthesizedForCount !== null && ` · summary of ${synthesizedForCount}`}
+                  </div>
+                </>
               )}
-            </div>
-            {showSynthesis && (canSynthesize || synthesis) && (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-semibold text-slate-700">Synthesis</div>
-                  {isSynthesisStale && (
-                    <div className="text-xs text-amber-700">New responses since last synthesis.</div>
+              <div
+                className="h-full w-full overflow-y-auto"
+                style={{ paddingTop: question ? (isExpanded ? 96 : 56) : 8 }}
+              >
+                <div className="min-h-full flex flex-col items-center justify-center px-4 pb-6">
+                  {synthesisText ? (
+                    <div className={`text-center text-slate-800 leading-relaxed whitespace-pre-wrap ${
+                      isExpanded ? 'text-2xl md:text-3xl max-w-4xl' : 'text-base max-w-2xl'
+                    }`}>
+                      {synthesisText}
+                    </div>
+                  ) : longItems.length === 0 ? (
+                    <div className={`text-slate-500 ${isExpanded ? 'text-xl' : 'text-sm'}`}>
+                      Waiting for answers...
+                    </div>
+                  ) : longItems.length < AUTO_SYNTH_MIN_ITEMS ? (
+                    <div className={`text-center text-slate-500 ${isExpanded ? 'text-xl' : 'text-sm'}`}>
+                      {longItems.length} answer(s) received — waiting for a few more before summarizing.
+                    </div>
+                  ) : (
+                    <div className={`text-center text-slate-500 animate-pulse ${isExpanded ? 'text-xl' : 'text-sm'}`}>
+                      {longItems.length} answer(s) received — generating summary...
+                    </div>
+                  )}
+                  {!synthesisText && longItems.length > 0 && canSynthesize && (
+                    <div className={`mt-2 text-slate-400 ${isExpanded ? 'text-base' : 'text-xs'}`}>
+                      You can also generate the summary now with the Synthesize button.
+                    </div>
                   )}
                 </div>
-                {synthesisError && (
-                  <div className="mt-2 text-sm text-red-600">{synthesisError}</div>
-                )}
-                {!synthesis && canSynthesize && !synthesizing && !synthesisError && (
-                  <div className="mt-2 text-sm text-slate-600">
-                    Click "Synthesize" to summarize the responses.
-                  </div>
-                )}
-                {synthesizing && (
-                  <div className="mt-2 text-sm text-slate-500">Generating synthesis...</div>
-                )}
-                {synthesis && (
-                  <div className="mt-3 text-sm text-slate-700">
-                    {synthesis.overallSummary ?? synthesis.groups.map((group) => group.summary).join(' ')}
-                  </div>
-                )}
               </div>
+              {isSynthesisStale && synthesisText && (
+                <div className={`absolute bottom-3 right-3 rounded-full bg-amber-100 px-3 py-1 text-amber-800 animate-pulse ${isExpanded ? 'text-sm' : 'text-xs'}`}>
+                  Updating with new responses...
+                </div>
+              )}
+            </div>
+            {allowSynthesis && synthesisError && (
+              <div className="text-sm text-red-600">{synthesisError}</div>
             )}
           </div>
         )}
@@ -473,6 +677,7 @@ function renderPieLabel(props: any, fontSize = 12) {
 }
 
 const CHART_PRIMARY = '#2563eb'
+const CHART_CORRECT = '#10b981'
 const CHART_GRID = '#cbd5e1'
 const CHART_AXIS = '#475569'
 const CHART_LABEL = '#0f172a'

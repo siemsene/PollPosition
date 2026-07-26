@@ -2,15 +2,10 @@ import { QRCodeCanvas } from 'qrcode.react'
 import { Copy } from 'lucide-react'
 import { useMemo } from 'react'
 import { copyText } from '../lib/clipboard'
+import { studentRoomUrl } from '../lib/urls'
 
 export default function QRCodeCard({ roomCode }: { roomCode: string }) {
-  const url = useMemo(() => {
-    const u = new URL(window.location.href)
-    u.pathname = '/room'
-    u.search = `?room=${encodeURIComponent(roomCode)}`
-    u.hash = ''
-    return u.toString()
-  }, [roomCode])
+  const url = useMemo(() => studentRoomUrl(roomCode), [roomCode])
 
   return (
     <div className="card p-4">

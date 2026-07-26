@@ -57,13 +57,15 @@ export default function StudentHome() {
               <div className="label mb-1">Room code</div>
               <input
                 className="input text-lg tracking-widest uppercase"
+                aria-label="Room code"
+                maxLength={6}
                 value={room}
-                onChange={(e) => setRoom(e.target.value)}
+                onChange={(e) => setRoom(e.target.value.toUpperCase().replace(/\s/g, ''))}
                 placeholder="ABC123"
               />
             </div>
 
-            <button type="button" className="btn w-full" onClick={join} disabled={busy || room.trim().length < 4}>
+            <button type="button" className="btn w-full" onClick={join} disabled={busy || room.trim().length !== 6}>
               <ArrowRight size={18} /> {busy ? 'Joining...' : 'Join'}
             </button>
 

@@ -1,7 +1,9 @@
 export const DEFAULT_STOP_WORDS = new Set([
   "a","an","and","are","as","at","be","but","by","for","if","in","into","is","it","no","not","of","on","or","s","such","t","that","the","their","then","there","these","they","this","to","was","will","with","we","you","your","i","me","my","our","ours","from","have","has","had","were","been","can","could","should","would","what","when","where","who","why","how","do","does","did","so","than","too","very",
   // classroom noise
-  "like","just","also","really"
+  "like","just","also","really",
+  // short noise admitted by the 2-character minimum
+  "us","up","am","im","its"
 ])
 
 export function tokenize(text: string): string[] {
@@ -17,7 +19,7 @@ export function tokenize(text: string): string[] {
   return cleaned
     .split(" ")
     .map(w => w.replace(/^'+|'+$/g, ""))
-    .filter(w => w.length >= 3 && !DEFAULT_STOP_WORDS.has(w))
+    .filter(w => w.length >= 2 && !DEFAULT_STOP_WORDS.has(w))
 }
 
 export function wordFrequencies(texts: string[], topN = 80) {

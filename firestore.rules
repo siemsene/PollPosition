@@ -45,11 +45,42 @@ service cloud.firestore {
         && session.isOpen == true;
     }
 
+    // Rules cannot iterate lists, so each of the (at most 20) elements is
+    // checked explicitly: every element must be a short string.
+    function isValidListElement(value, i) {
+      return value.size() <= i || (value[i] is string && value[i].size() <= 500);
+    }
+
+    function isValidResponseList(value) {
+      return value.size() <= 20
+        && isValidListElement(value, 0)
+        && isValidListElement(value, 1)
+        && isValidListElement(value, 2)
+        && isValidListElement(value, 3)
+        && isValidListElement(value, 4)
+        && isValidListElement(value, 5)
+        && isValidListElement(value, 6)
+        && isValidListElement(value, 7)
+        && isValidListElement(value, 8)
+        && isValidListElement(value, 9)
+        && isValidListElement(value, 10)
+        && isValidListElement(value, 11)
+        && isValidListElement(value, 12)
+        && isValidListElement(value, 13)
+        && isValidListElement(value, 14)
+        && isValidListElement(value, 15)
+        && isValidListElement(value, 16)
+        && isValidListElement(value, 17)
+        && isValidListElement(value, 18)
+        && isValidListElement(value, 19);
+    }
+
     function isValidResponseValue(value) {
       return (value is string && value.size() <= 5000)
         || (value is int)
         || (value is float)
-        || (value is map && value.size() <= 20);
+        || (value is map && value.size() <= 20)
+        || (value is list && isValidResponseList(value));
     }
 
     function isValidResponseWrite() {
@@ -79,6 +110,13 @@ service cloud.firestore {
 
         allow create, update, delete: if isAdmin()
           || (isApprovedInstructor() && sessionOwnerUid(sessionId) == request.auth.uid);
+
+        // Instructor-only metadata (e.g. quiz correct answers) that must not
+        // be readable by students before the instructor reveals it.
+        match /meta/{metaId} {
+          allow read, write: if isAdmin()
+            || (isApprovedInstructor() && sessionOwnerUid(sessionId) == request.auth.uid);
+        }
 
         match /responses/{responseId} {
           allow read: if isAdmin()

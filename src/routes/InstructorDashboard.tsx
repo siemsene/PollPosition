@@ -10,6 +10,7 @@ import { auth, db } from '../firebase'
 import { roomCode } from '../lib/ids'
 import { useInstructorRole } from '../lib/useInstructorRole'
 import { useOwnedSessions } from '../lib/useOwnedSessions'
+import { friendlyError } from '../lib/errors'
 
 export default function InstructorDashboard() {
   const role = useInstructorRole()
@@ -40,7 +41,7 @@ export default function InstructorDashboard() {
       setSessionId(created.id)
       setNewSessionTitle('')
     } catch (e: any) {
-      setActionError(e?.message ?? 'Failed to create session.')
+      setActionError(friendlyError(e, 'Failed to create the session.'))
     } finally {
       setCreating(false)
     }
@@ -72,7 +73,7 @@ export default function InstructorDashboard() {
       setPasswordResetSent(true)
       setTimeout(() => setPasswordResetSent(false), 5000)
     } catch (e: any) {
-      setActionError(e?.message ?? 'Failed to send password reset email.')
+      setActionError(friendlyError(e, 'Failed to send the password reset email.'))
     }
   }
 

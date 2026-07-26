@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import TopBar from '../components/TopBar'
+import { friendlyError } from '../lib/errors'
 import { Shield } from 'lucide-react'
 
 export default function AdminLogin() {
@@ -43,7 +44,7 @@ export default function AdminLogin() {
       const isAdmin = snap.exists() && snap.data()?.uid === auth.currentUser?.uid
       nav(isAdmin ? '/admin/overview' : '/admin/dashboard', { replace: true })
     } catch (e: any) {
-      setError(e?.message ?? 'Login failed')
+      setError(friendlyError(e, 'Login failed. Please try again.'))
     } finally {
       setBusy(false)
     }

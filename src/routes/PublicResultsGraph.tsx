@@ -8,8 +8,9 @@ export default function PublicResultsGraph() {
   const [params] = useSearchParams()
   const roomCode = (params.get('room') ?? '').toUpperCase().trim()
   const isEmbed = ['1', 'true', 'yes'].includes((params.get('embed') ?? '').toLowerCase())
-  const { session, question, error } = useRoomSession(roomCode)
-  const responses = useQuestionResponses(session?.id, session?.activeQuestionId)
+  const { session, question, error: roomError } = useRoomSession(roomCode)
+  const { responses, error: responsesError } = useQuestionResponses(session?.id, session?.activeQuestionId)
+  const error = roomError ?? responsesError
 
   useEffect(() => {
     if (!roomCode) nav('/', { replace: true })
@@ -49,6 +50,14 @@ export default function PublicResultsGraph() {
             options={question.options ?? []}
             responses={responses}
             question={question.prompt}
+            scaleMeta={{
+              min: question.scaleMin ?? null,
+              max: question.scaleMax ?? null,
+              minLabel: question.scaleMinLabel ?? null,
+              maxLabel: question.scaleMaxLabel ?? null,
+            }}
+            correctOptions={question.correctOptions ?? null}
+            revealAnswer={question.revealAnswer ?? false}
             variant="expanded"
             showHeader={false}
             frameless

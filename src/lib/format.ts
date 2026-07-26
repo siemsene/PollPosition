@@ -6,8 +6,12 @@ export function formatUsd(value: number) {
 
 export function questionTypeLabel(type: string) {
   if (type === 'mcq') return 'Multiple choice'
+  if (type === 'multi') return 'Multiple select'
   if (type === 'pie') return '100 point allocation'
   if (type === 'number') return 'Numerical'
+  if (type === 'scale') return 'Rating scale'
+  if (type === 'rank') return 'Ranking'
   if (type === 'short') return 'Short text'
+  if (type === 'cloud') return 'Word cloud'
   return 'Extended text'
 }
